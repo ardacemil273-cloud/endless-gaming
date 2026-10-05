@@ -480,6 +480,12 @@ const commandData = [
     .addSubcommand((subcommand) => subcommand.setName("status").setDescription("Ortak bossun kalan canını ve etkinlik durumunu gör."))
     .addSubcommand((subcommand) => subcommand.setName("attack").setDescription("20 Coin ödeyip boss'a saldır ve katkı puanı kazan."))
     .addSubcommand((subcommand) => subcommand.setName("leaderboard").setDescription("Boss savaşındaki en yüksek hasar katkılarını gör.")),
+  new SlashCommandBuilder()
+    .setName("arena")
+    .setDescription("ENDLESS Arena'da Coin bahisli PvP düellosuna çık.")
+    .addSubcommand((subcommand) => subcommand.setName("duel").setDescription("Bir oyuncuyla bahisli düello yap.").addUserOption((option) => option.setName("user").setDescription("Düello rakibin.").setRequired(true)).addIntegerOption((option) => option.setName("amount").setDescription("İki oyuncunun da yatıracağı Coin.").setMinValue(10).setMaxValue(50_000).setRequired(true)))
+    .addSubcommand((subcommand) => subcommand.setName("stats").setDescription("Arena galibiyetlerini, kayıplarını ve rating'ini gör."))
+    .addSubcommand((subcommand) => subcommand.setName("leaderboard").setDescription("Sunucunun en iyi Arena oyuncularını gör.")),
   funCommand,
   endlessCommand,
   gamesCommand,
@@ -2190,6 +2196,60 @@ async function handleWorldEvent(interaction) {
   return interaction.editReply(result.defeated ? `💥 **${result.bossName}** yenildi! Senin son darben **${result.damage} hasar** verdi. Katkı ödülün: **1.000 Coin + 5 Gem**!` : `⚔️ **${result.bossName}**'a **${result.damage} hasar** verdin! Kalan can: **${result.nextHp.toLocaleString("tr-TR")}**. Saldırı bedeli: 20 Coin.`);
 }
 
+async function handleArena(interaction) {
+  const worldId = await requireGuild(interaction, "Arena");
+  if (!worldId) return;
+  await interaction.deferReply({ ephemeral: false });
+  const action = interaction.options.getSubcommand();
+
+  if (action === "stats") {
+    const result = await pool.query("SELECT rating, wins, losses FROM endless_arena_stats WHERE world_id = $1 AND user_id = $2 LIMIT 1", [worldId, interaction.user.id]);
+    const stats = result.rows[0] ?? { rating: 1000, wins: 0, losses: 0 };
+    return interaction.editReply(`⚔️ **Arena istatistiklerin**\nRating: **${stats.rating}**\nGalibiyet: **${stats.wins}** · Mağlubiyet: **${stats.losses}**\nToplam maç: **${Number(stats.wins) + Number(stats.losses)}**`);
+  }
+
+  if (action === "leaderboard") {
+    const result = await pool.query("SELECT s.user_id, s.rating, s.wins, s.losses, COALESCE(a.global_name, a.username, s.user_id) AS display_name FROM endless_arena_stats s LEFT JOIN endless_accounts a ON a.user_id = s.user_id WHERE s.world_id = $1 ORDER BY s.rating DESC, s.wins DESC LIMIT 10", [worldId]);
+    if (!result.rows.length) return interaction.editReply("Arena sıralaması henüz boş. İlk düelloyu sen başlat!");
+    const lines = result.rows.map((row, index) => `${index + 1}. **${row.display_name}** — ${row.rating} rating · ${row.wins}G / ${row.losses}M`);
+    return interaction.editReply({ content: ["**ENDLESS Arena Sıralaması**", ...lines].join("\n"), allowedMentions: { parse: [] } });
+  }
+
+  const target = interaction.options.getUser("user", true);
+  const amount = interaction.options.getInteger("amount", true);
+  if (target.id === interaction.user.id) return interaction.editReply("Kendinle düello yapamazsın. Başka bir oyuncu seç.");
+  const result = await inTransaction(async (client) => {
+    const ids = [interaction.user.id, target.id].sort();
+    const players = await client.query("SELECT user_id, level FROM endless_players WHERE world_id = $1 AND user_id = ANY($2::text[]) FOR UPDATE", [worldId, ids]);
+    const wallets = await client.query("SELECT user_id, wallet_coins FROM endless_wallets WHERE world_id = $1 AND user_id = ANY($2::text[]) FOR UPDATE", [worldId, ids]);
+    if (players.rows.length !== 2 || wallets.rows.length !== 2) return { ok: false, reason: "not_registered" };
+    if (wallets.rows.some((row) => Number(row.wallet_coins) < amount)) return { ok: false, reason: "insufficient_funds" };
+    const debitA = await insertLedger(client, { worldId, userId: interaction.user.id, currency: "coin", walletDelta: -amount, reason: "arena_wager", idempotencyKey: `arena:${interaction.id}:${interaction.user.id}` });
+    const debitB = await insertLedger(client, { worldId, userId: target.id, currency: "coin", walletDelta: -amount, reason: "arena_wager", idempotencyKey: `arena:${interaction.id}:${target.id}` });
+    if (!debitA || !debitB) return { ok: false, reason: "duplicate" };
+    await client.query("UPDATE endless_wallets SET wallet_coins = wallet_coins - $3, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, interaction.user.id, amount]);
+    await client.query("UPDATE endless_wallets SET wallet_coins = wallet_coins - $3, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, target.id, amount]);
+    const levelOf = (id) => Number(players.rows.find((row) => row.user_id === id).level);
+    const scoreA = randomInt(1, 101) + levelOf(interaction.user.id) * 10;
+    const scoreB = randomInt(1, 101) + levelOf(target.id) * 10;
+    const winnerId = scoreA >= scoreB ? interaction.user.id : target.id;
+    const loserId = winnerId === interaction.user.id ? target.id : interaction.user.id;
+    const winnerScore = winnerId === interaction.user.id ? scoreA : scoreB;
+    const loserScore = winnerId === interaction.user.id ? scoreB : scoreA;
+    await insertLedger(client, { worldId, userId: winnerId, currency: "coin", walletDelta: amount * 2, reason: "arena_payout", idempotencyKey: `arena:${interaction.id}:payout` });
+    await client.query("UPDATE endless_wallets SET wallet_coins = wallet_coins + $3, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, winnerId, amount * 2]);
+    await client.query("INSERT INTO endless_arena_matches (world_id, interaction_id, winner_id, loser_id, wager, winner_score, loser_score) VALUES ($1, $2, $3, $4, $5, $6, $7)", [worldId, interaction.id, winnerId, loserId, amount, winnerScore, loserScore]);
+    await client.query("INSERT INTO endless_arena_stats (world_id, user_id, rating, wins, losses) VALUES ($1, $2, 1025, 1, 0), ($1, $3, 985, 0, 1) ON CONFLICT (world_id, user_id) DO UPDATE SET rating = CASE WHEN endless_arena_stats.user_id = $2 THEN endless_arena_stats.rating + 25 ELSE GREATEST(0, endless_arena_stats.rating - 15) END, wins = endless_arena_stats.wins + CASE WHEN endless_arena_stats.user_id = $2 THEN 1 ELSE 0 END, losses = endless_arena_stats.losses + CASE WHEN endless_arena_stats.user_id = $3 THEN 1 ELSE 0 END, updated_at = NOW()", [worldId, winnerId, loserId]);
+    return { ok: true, winnerId, winnerScore, loserScore };
+  });
+  if (!result.ok) {
+    const messages = { not_registered: "Sen ve rakibin önce `/start` ile aynı dünyada karakter oluşturmalı.", insufficient_funds: "İki oyuncunun da bahis için yeterli Coin'i olmalı.", duplicate: "Bu düello zaten işlendi." };
+    return interaction.editReply(messages[result.reason]);
+  }
+  const winnerName = result.winnerId === interaction.user.id ? "Sen" : target.globalName ?? target.username;
+  return interaction.editReply(`⚔️ **Arena düellosu tamamlandı!**\nSenin skorun: **${result.winnerId === interaction.user.id ? result.winnerScore : result.loserScore}**\nRakibin skoru: **${result.winnerId === interaction.user.id ? result.loserScore : result.winnerScore}**\n🏆 Kazanan: **${winnerName}** · Ödül: **${(amount * 2).toLocaleString("tr-TR")} Coin**`);
+}
+
 const helpText = [
   "**ENDLESS — Komut Rehberi**",
   "`/start` — Bu sunucunun dünyasında karakter oluştur.",
@@ -2228,6 +2288,7 @@ const helpText = [
   "`/achievements show` / `/achievements claim` — Rozetlerini gör ve tek seferlik başarı ödüllerini al.",
   "`/pet adopt` / `/pet show` / `/pet feed` — Özgün bir Endless Yoldaşı sahiplen, isim ver ve sadakatini büyüt.",
   "`/event status` / `/event attack` / `/event leaderboard` — Sunucunun ortak Dünya Boss'una saldır ve katkı sıralamasına gir.",
+  "`/arena duel` / `/arena stats` / `/arena leaderboard` — Coin bahisli PvP düellosu, rating ve Arena sıralaması.",
   "",
   "Her Discord sunucusu ayrı bir dünyadır. Karakterin ve ekonomin dünyaya özeldir. Günlük ödül ve görevler UTC gece yarısında yenilenir; keşifler arasında 5 dakika bekleme vardır.",
 ].join("\n");
@@ -2852,6 +2913,7 @@ const handlers = {
   achievements: handleAchievements,
   pet: handlePet,
   event: handleWorldEvent,
+  arena: handleArena,
   help: async (interaction) => sendPrivate(interaction, helpText),
 };
 

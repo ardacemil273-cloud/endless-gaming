@@ -236,4 +236,27 @@ CREATE TABLE IF NOT EXISTS endless_world_event_contributions (
   PRIMARY KEY (world_id, user_id)
 );
 
+-- Coin bahisli Arena düellolarının kalıcı rating ve galibiyet istatistikleri.
+CREATE TABLE IF NOT EXISTS endless_arena_stats (
+  world_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  rating INTEGER NOT NULL DEFAULT 1000 CHECK (rating >= 0),
+  wins INTEGER NOT NULL DEFAULT 0 CHECK (wins >= 0),
+  losses INTEGER NOT NULL DEFAULT 0 CHECK (losses >= 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (world_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS endless_arena_matches (
+  id BIGSERIAL PRIMARY KEY,
+  world_id TEXT NOT NULL,
+  interaction_id TEXT NOT NULL UNIQUE,
+  winner_id TEXT NOT NULL,
+  loser_id TEXT NOT NULL,
+  wager BIGINT NOT NULL CHECK (wager > 0),
+  winner_score INTEGER NOT NULL,
+  loser_score INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS endless_collection_animals_rarity_idx ON endless_collection_animals (world_id, user_id, rarity);
