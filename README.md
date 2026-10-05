@@ -14,6 +14,7 @@ Discord sunucularını ayrı oyun dünyalarına dönüştüren, PostgreSQL deste
 - **`/endless` koleksiyon merkezi:** hayvan avı, kalıcı hayvan koleksiyonu, zoo görünümü, dua ödülü, Coin transferi, kontrollü bahis ve sosyal etkileşimler
 - **ENDLESS oyun merkezi:** `/games slots`, adım adım oynanan blackjack, hücre seçimli mayın tarlası ve oyun içi Coin bahisleri
 - **Endless Arcade genişletmesi:** rulet, crash ve veritabanına kaydedilen günlük ücretsiz Şans Çarkı
+- **Başarım Salonu:** `/achievements show` ile kalıcı rozet ilerlemesi, `/achievements claim` ile tek seferlik Coin/Gem/XP ödülleri
 - **Özgün sosyal animasyonlar:** `/social hug`, `/social kiss`, `/social cuddle`, `/social pat`, `/social highfive` ve `/social boop` Discord mesajını adım adım günceller.
 - **Markaya özel GIF paketi:** `assets/gifs/` altındaki altı özgün GIF, sosyal komutlarda Discord ek dosyası olarak gönderilir.
 - **Oyun animasyonları:** av, tapınak, transfer, bahis, slot, blackjack, mayın tarlası ve sosyal hareketler Discord mesajını adım adım günceller.
@@ -48,6 +49,7 @@ Detaylı açıklama için [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) dosyasına 
 - `games.js`: slot, blackjack, mayın, rulet, crash, günlük çark ve sosyal komutların oyun kurallarını içerir.
 - `database/schema.sql`: botun kullandığı tabloları güvenli ve tekrar çalıştırılabilir biçimde oluşturur.
 - `assets/gifs/`: Discord'da gönderilen özgün Endless sosyal animasyonlarıdır.
+- `endless_achievement_claims`: başarımların ödülünün iki kez verilmesini engeller.
 - Para hareketlerinde önce ledger kaydı, sonra bakiye güncellemesi yapılır; böylece aynı Discord isteği iki kez ödül veremez.
 
 ## Güvenlik ve operasyon

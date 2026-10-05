@@ -134,6 +134,17 @@ const DAILY_QUESTS = [
   },
 ];
 
+// Başarımlar oyuncunun zaten yaptığı işleri veritabanından ölçer.
+// Böylece bot yeniden başlasa da rozet ilerlemesi kaybolmaz.
+const ACHIEVEMENTS = [
+  { key: "first_step", title: "İlk Adım", description: "ENDLESS dünyasında karakter oluştur.", rewardCoins: 50, rewardGems: 1, rewardXp: 10 },
+  { key: "level_five", title: "Çırak Kaşif", description: "5. seviyeye ulaş.", rewardCoins: 250, rewardGems: 2, rewardXp: 40 },
+  { key: "fortune_hunter", title: "Şans Avcısı", description: "Slot oyununda 3 kez kazanç al.", rewardCoins: 300, rewardGems: 2, rewardXp: 50 },
+  { key: "high_roller", title: "Büyük Oyuncu", description: "Oyunlarda toplam 1.000 Coin bahis yap.", rewardCoins: 350, rewardGems: 3, rewardXp: 60 },
+  { key: "collector", title: "Koleksiyoncu", description: "En az 5 farklı hayvan türü keşfet.", rewardCoins: 400, rewardGems: 3, rewardXp: 70 },
+  { key: "dungeon_master", title: "Zindan Ustası", description: "Kül Harabeleri'ni en az bir kez temizle.", rewardCoins: 500, rewardGems: 4, rewardXp: 100 },
+];
+
 function itemPriceLabel(item) {
   const currency = CURRENCY_COLUMNS[item.price.currency].label;
   return `${item.price.amount.toLocaleString("tr-TR")} ${currency}`;
@@ -426,6 +437,24 @@ const commandData = [
   new SlashCommandBuilder()
     .setName("help")
     .setDescription("Tüm ENDLESS oyun, ekonomi, macera ve eğlence komutlarını keşfet."),
+  new SlashCommandBuilder()
+    .setName("achievements")
+    .setDescription("Rozetlerini, ilerlemeni ve açılabilir başarımlarını gör.")
+    .addSubcommand((subcommand) =>
+      subcommand.setName("show").setDescription("Tüm başarımlarını ve mevcut ilerlemeni listele."),
+    )
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("claim")
+        .setDescription("Tamamladığın başarımın tek seferlik ödülünü al.")
+        .addStringOption((option) =>
+          option
+            .setName("achievement")
+            .setDescription("Ödülü alınacak başarım.")
+            .setRequired(true)
+            .addChoices(...ACHIEVEMENTS.map(({ key, title }) => ({ name: title, value: key }))),
+        ),
+    ),
   funCommand,
   endlessCommand,
   gamesCommand,
@@ -1961,6 +1990,72 @@ const handleEndless = createEndlessHandler({
 
 const handleGames = createGamesHandler({ pool, inTransaction, insertLedger });
 
+async function getAchievementProgress(worldId, userId) {
+  const playerResult = await pool.query(
+    "SELECT level, xp FROM endless_players WHERE world_id = $1 AND user_id = $2 LIMIT 1",
+    [worldId, userId],
+  );
+  const player = playerResult.rows[0];
+  if (!player) return null;
+
+  const [slotResult, betResult, collectionResult, dungeonResult, claimResult] = await Promise.all([
+    pool.query("SELECT COUNT(*)::int AS count FROM endless_ledger WHERE world_id = $1 AND user_id = $2 AND reason = 'slots_payout'", [worldId, userId]),
+    pool.query("SELECT COALESCE(SUM(ABS(wallet_delta)), 0)::int AS total FROM endless_ledger WHERE world_id = $1 AND user_id = $2 AND wallet_delta < 0 AND reason IN ('slots_bet', 'blackjack_bet', 'mines_bet', 'roulette_bet', 'crash_bet')", [worldId, userId]),
+    pool.query("SELECT COUNT(*)::int AS count FROM endless_collection_animals WHERE world_id = $1 AND user_id = $2", [worldId, userId]),
+    pool.query("SELECT COUNT(*)::int AS count FROM endless_dungeon_state WHERE world_id = $1 AND user_id = $2 AND status = 'cleared'", [worldId, userId]),
+    pool.query("SELECT achievement_key FROM endless_achievement_claims WHERE world_id = $1 AND user_id = $2", [worldId, userId]),
+  ]);
+  const values = {
+    first_step: true,
+    level_five: Number(player.level) >= 5,
+    fortune_hunter: Number(slotResult.rows[0].count) >= 3,
+    high_roller: Number(betResult.rows[0].total) >= 1_000,
+    collector: Number(collectionResult.rows[0].count) >= 5,
+    dungeon_master: Number(dungeonResult.rows[0].count) >= 1,
+  };
+  return { player, values, claimed: new Set(claimResult.rows.map((row) => row.achievement_key)) };
+}
+
+async function handleAchievements(interaction) {
+  const worldId = await requireGuild(interaction, "Başarım sistemi");
+  if (!worldId) return;
+  await interaction.deferReply({ ephemeral: true });
+  const progress = await getAchievementProgress(worldId, interaction.user.id);
+  if (!progress) return interaction.editReply("Önce `/start` ile ENDLESS karakterini oluştur.");
+  const action = interaction.options.getSubcommand();
+
+  if (action === "show") {
+    const lines = ACHIEVEMENTS.map((achievement) => {
+      const unlocked = progress.values[achievement.key];
+      const claimed = progress.claimed.has(achievement.key);
+      const state = claimed ? "🎁 Ödül alındı" : unlocked ? "✅ Hazır — `/achievements claim` ile ödülü al" : "🔒 Henüz tamamlanmadı";
+      return `${unlocked ? "🏅" : "▫️"} **${achievement.title}** — ${achievement.description}\n   ${state} · Ödül: ${achievement.rewardCoins} Coin + ${achievement.rewardGems} Gem + ${achievement.rewardXp} XP`;
+    });
+    return interaction.editReply(["**ENDLESS Başarım Salonu**", `Seviyen: **${progress.player.level}** · XP: **${progress.player.xp}**`, "", ...lines].join("\n"));
+  }
+
+  const achievement = ACHIEVEMENTS.find((item) => item.key === interaction.options.getString("achievement", true));
+  if (!achievement || !progress.values[achievement.key]) return interaction.editReply("Bu başarım henüz tamamlanmadı. İlerlemeni `/achievements show` ile kontrol edebilirsin.");
+  if (progress.claimed.has(achievement.key)) return interaction.editReply("Bu başarımın ödülünü daha önce aldın.");
+
+  const reward = await inTransaction(async (client) => {
+    const claim = await client.query(
+      "INSERT INTO endless_achievement_claims (world_id, user_id, achievement_key) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING achievement_key",
+      [worldId, interaction.user.id, achievement.key],
+    );
+    if (!claim.rows[0]) return { ok: false, reason: "already_claimed" };
+    if (achievement.rewardCoins > 0) await insertLedger(client, { worldId, userId: interaction.user.id, currency: "coin", walletDelta: achievement.rewardCoins, reason: "achievement_reward", idempotencyKey: `achievement:${worldId}:${interaction.user.id}:${achievement.key}:coin` });
+    if (achievement.rewardGems > 0) await insertLedger(client, { worldId, userId: interaction.user.id, currency: "gem", walletDelta: achievement.rewardGems, reason: "achievement_reward", idempotencyKey: `achievement:${worldId}:${interaction.user.id}:${achievement.key}:gem` });
+    await client.query("UPDATE endless_wallets SET wallet_coins = wallet_coins + $3, wallet_gems = wallet_gems + $4, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, interaction.user.id, achievement.rewardCoins, achievement.rewardGems]);
+    const playerResult = await client.query("SELECT level, xp FROM endless_players WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, interaction.user.id]);
+    const next = applyXp(Number(playerResult.rows[0].level), Number(playerResult.rows[0].xp), achievement.rewardXp);
+    await client.query("UPDATE endless_players SET level = $3, xp = $4, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, interaction.user.id, next.level, next.xp]);
+    return { ok: true, level: next.level, levelsGained: next.levelsGained };
+  });
+  if (!reward.ok) return interaction.editReply("Bu başarımın ödülü zaten alınmış.");
+  return interaction.editReply(`🏅 **${achievement.title}** rozeti açıldı! **${achievement.rewardCoins} Coin**, **${achievement.rewardGems} Gem** ve **${achievement.rewardXp} XP** kazandın.${reward.levelsGained ? ` Yeni seviyen: **${reward.level}**!` : ""}`);
+}
+
 const helpText = [
   "**ENDLESS — Komut Rehberi**",
   "`/start` — Bu sunucunun dünyasında karakter oluştur.",
@@ -1996,6 +2091,7 @@ const helpText = [
   "`/games roulette` / `/games crash` — Renk ruleti veya patlamadan önce çarpan yakalama oyunu.",
   "`/games daily-spin` — Veritabanına kaydedilen günlük ücretsiz Şans Çarkı ödülünü al.",
   "`/social hug` / `/social kiss` / `/social cuddle` / `/social pat` / `/social highfive` / `/social boop` — Özgün Endless animasyonları gönder.",
+  "`/achievements show` / `/achievements claim` — Rozetlerini gör ve tek seferlik başarı ödüllerini al.",
   "",
   "Her Discord sunucusu ayrı bir dünyadır. Karakterin ve ekonomin dünyaya özeldir. Günlük ödül ve görevler UTC gece yarısında yenilenir; keşifler arasında 5 dakika bekleme vardır.",
 ].join("\n");
@@ -2617,6 +2713,7 @@ const handlers = {
   endless: handleEndless,
   games: handleGames,
   social: handleSocial,
+  achievements: handleAchievements,
   help: async (interaction) => sendPrivate(interaction, helpText),
 };
 

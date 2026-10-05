@@ -33,6 +33,7 @@ Bu yapı sayesinde bot kapanıp tekrar açılsa bile Coin hareketlerinin geçmi�
 | İhtiyaç | Dosya |
 |---|---|
 | Yeni slash komutu tanımlamak | İlgili modülün `SlashCommandBuilder` bölümü |
+| Kalıcı rozet/ödül eklemek | `ACHIEVEMENTS`, `getAchievementProgress` ve `endless_achievement_claims` tablosu |
 | Oyun kuralını değiştirmek | `games.js` içindeki ilgili fonksiyon |
 | Yeni tablo veya kalıcı veri eklemek | `database/schema.sql` |
 | Sosyal GIF eklemek/değiştirmek | `assets/gifs/` ve `SOCIAL_GIFS` haritası |
@@ -100,6 +101,7 @@ GIF'ler bu sürümde programatik olarak Endless renkleri, orbit deseni ve hareke
 - Bakiye güncellemesi transaction içindedir.
 - SQL içindeki dinamik sütun adı yalnızca kodun sabit seçtiği `wallet_coins` veya `wallet_gems` değerlerinden gelir; kullanıcı metni SQL'e doğrudan eklenmez.
 - Günlük çark `endless_daily_spins` tablosunda UTC tarihine göre tutulur.
+- Başarımlar mevcut oyun hareketlerini ölçer; ödül alındığında `endless_achievement_claims` tablosuna kilit yazılır. Bu kilit, aynı ödülün tekrar verilmesini engeller.
 
 ## 7. Yerelde test
 
