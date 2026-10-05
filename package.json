@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "node --check index.js && node --check fun.js && node --check endless-features.js && node --check games.js"
+    "test": "node --check index.js && node --check fun.js && node --check endless-features.js && node --check games.js && node --check pet-perks.js && node --test"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",

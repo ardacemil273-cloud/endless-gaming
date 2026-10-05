@@ -209,11 +209,14 @@ CREATE TABLE IF NOT EXISTS endless_pets (
   species TEXT NOT NULL CHECK (species IN ('fox', 'dragon', 'owl', 'slime')),
   pet_name TEXT NOT NULL,
   loyalty INTEGER NOT NULL DEFAULT 1 CHECK (loyalty BETWEEN 1 AND 100),
+  last_fed_at TIMESTAMPTZ,
   adopted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (world_id, user_id),
   FOREIGN KEY (world_id, user_id) REFERENCES endless_players(world_id, user_id) ON DELETE CASCADE
 );
+
+ALTER TABLE endless_pets ADD COLUMN IF NOT EXISTS last_fed_at TIMESTAMPTZ;
 
 -- Sunucudaki bütün oyuncuların birlikte savaştığı ortak Dünya Boss'u.
 CREATE TABLE IF NOT EXISTS endless_world_events (

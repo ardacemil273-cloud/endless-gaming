@@ -15,7 +15,7 @@ Discord sunucularını ayrı oyun dünyalarına dönüştüren, PostgreSQL deste
 - **ENDLESS oyun merkezi:** `/games slots`, adım adım oynanan blackjack, hücre seçimli mayın tarlası ve oyun içi Coin bahisleri
 - **Endless Arcade genişletmesi:** rulet, crash ve veritabanına kaydedilen günlük ücretsiz Şans Çarkı
 - **Başarım Salonu:** `/achievements show` ile kalıcı rozet ilerlemesi, `/achievements claim` ile tek seferlik Coin/Gem/XP ödülleri
-- **Endless Yoldaşlar:** `/pet adopt`, `/pet show` ve `/pet feed` ile dört türden bir yoldaş sahiplenme, isim verme ve sadakat geliştirme
+- **Endless Yoldaşlar:** `/pet adopt`, `/pet show` ve 24 saatte bir `/pet feed`; sadakat artık türüne göre keşif/av Coin'i, XP, zindan hasarı veya dua ödülünü güçlendirir
 - **Dünya Boss Raid:** `/event status`, `/event attack` ve `/event leaderboard` ile bütün sunucunun birlikte savaştığı ortak Kül Kolossusu
 - **Endless Arena PvP:** `/arena duel`, `/arena stats` ve `/arena leaderboard` ile güvenli Coin bahisli düello ve rating sistemi
 - **Özgün sosyal animasyonlar:** `/social hug`, `/social kiss`, `/social cuddle`, `/social pat`, `/social highfive` ve `/social boop` Discord mesajını adım adım günceller.
@@ -54,6 +54,8 @@ Detaylı açıklama için [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) dosyasına 
 - `assets/gifs/`: Discord'da gönderilen özgün Endless sosyal animasyonlarıdır.
 - `endless_achievement_claims`: başarımların ödülünün iki kez verilmesini engeller.
 - `endless_pets`: oyuncunun yoldaş türünü, adını ve 1–100 arasındaki sadakat seviyesini saklar.
+- Yoldaş besleme zamanı `endless_pets.last_fed_at` alanında saklanır; şema bu alanı mevcut kurulumlara otomatik ve güvenli biçimde ekler.
+- Yoldaş pasifleri her 10 sadakatte %1 artar (en çok %10); ejderha zindan hasarına her 20 sadakatte +1 (en çok +5) verir. Sadakati 100 olan yoldaş tekrar beslenemez ve Coin harcanmaz.
 - `endless_world_events` ve `endless_world_event_contributions`: ortak boss canını ve oyuncuların hasar katkılarını saklar.
 - `endless_arena_stats` ve `endless_arena_matches`: PvP rating, galibiyet/mağlubiyet ve maç sonucunu saklar.
 - Para hareketlerinde önce ledger kaydı, sonra bakiye güncellemesi yapılır; böylece aynı Discord isteği iki kez ödül veremez.

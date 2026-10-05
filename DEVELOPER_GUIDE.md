@@ -105,7 +105,8 @@ GIF'ler bu sürümde programatik olarak Endless renkleri, orbit deseni ve hareke
 - SQL içindeki dinamik sütun adı yalnızca kodun sabit seçtiği `wallet_coins` veya `wallet_gems` değerlerinden gelir; kullanıcı metni SQL'e doğrudan eklenmez.
 - Günlük çark `endless_daily_spins` tablosunda UTC tarihine göre tutulur.
 - Başarımlar mevcut oyun hareketlerini ölçer; ödül alındığında `endless_achievement_claims` tablosuna kilit yazılır. Bu kilit, aynı ödülün tekrar verilmesini engeller.
-- Yoldaş sistemi `endless_pets` tablosunda tek satır/oyuncu kuralıyla çalışır. `/pet feed` önce Coin'i transaction içinde düşürür, sonra sadakati 10 puan artırır; işlem yarıda kalırsa ikisi de geri alınır.
+- Yoldaş sistemi `endless_pets` tablosunda tek satır/oyuncu kuralıyla çalışır. `/pet feed` 24 saatlik bekleme süresini `last_fed_at` ile veritabanında saklar; önce Coin'i transaction içinde düşürür, sonra sadakati 10 puan artırır. Maksimum sadakatte veya bekleme süresinde Coin alınmaz.
+- `pet-perks.js` hesaplamaları tek yerde tutar: tilki keşif/av Coin'ini, baykuş keşif/av/görev XP'sini, slime dua Coin'ini her 10 sadakatte %1 artırır; ejderha zindan saldırısına her 20 sadakatte +1 hasar ekler. Bonuslar üst sınırla ve birim testleriyle korunur.
 - Dünya Boss saldırısı boss satırını kilitler, saldırı ücretini ledger'a yazar, canı azaltır ve oyuncunun katkısını artırır. Aynı Discord interaction ID'si tekrar gelirse ledger idempotency anahtarı ikinci saldırıyı engeller.
 - Arena düellosunda iki oyuncunun cüzdanı önce kilitlenir. İki bahis düşmeden skor hesaplanmaz. Kazanan toplam potu alır; rating kazanan için artar, kaybeden için azalır.
 

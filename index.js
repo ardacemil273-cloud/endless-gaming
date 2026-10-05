@@ -17,6 +17,7 @@ import { createEndlessHandler, endlessCommand } from "./endless-features.js";
 // Oyunlar ayrı modülde tutulur; böylece yeni başlayan biri ekonomiyi ve oyun kurallarını
 // index.js içindeki büyük Discord başlangıç dosyasından bağımsız okuyabilir.
 import { createGamesHandler, gamesCommand, handleSocial, socialCommand } from "./games.js";
+import { companionAttackBonus, companionRewardPercent, petFeedReadyAt } from "./pet-perks.js";
 
 const { Pool } = pg;
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
@@ -146,10 +147,10 @@ const ACHIEVEMENTS = [
 ];
 
 const PET_SPECIES = {
-  fox: { label: "Kristal Tilki", emoji: "🦊", bonus: "Keşiflerde şans enerjisi" },
-  dragon: { label: "Kül Ejderhası", emoji: "🐉", bonus: "Zindanlarda cesaret" },
-  owl: { label: "Bilge Baykuş", emoji: "🦉", bonus: "Görevlerde bilgi" },
-  slime: { label: "Neşe Slime'ı", emoji: "🟢", bonus: "Sosyal komutlarda neşe" },
+  fox: { label: "Kristal Tilki", emoji: "🦊", bonus: "Keşif ve av Coin ödüllerine sadakatine göre +%1–10" },
+  dragon: { label: "Kül Ejderhası", emoji: "🐉", bonus: "Zindan saldırılarına sadakatine göre +1–5 hasar" },
+  owl: { label: "Bilge Baykuş", emoji: "🦉", bonus: "Keşif, av ve görev XP ödüllerine sadakatine göre +%1–10" },
+  slime: { label: "Neşe Slime'ı", emoji: "🟢", bonus: "Dua Coin ödüllerine sadakatine göre +%1–10" },
 };
 
 function itemPriceLabel(item) {
@@ -1031,6 +1032,14 @@ async function claimDailyQuest(worldId, userId, questKey) {
       };
     }
 
+    const petResult = await client.query(
+      "SELECT species, loyalty FROM endless_pets WHERE world_id = $1 AND user_id = $2",
+      [worldId, userId],
+    );
+    const pet = petResult.rows[0];
+    const xpAwarded = quest.rewardXp + Math.floor(
+      quest.rewardXp * companionRewardPercent(pet?.species, "xp", pet?.loyalty) / 100,
+    );
     const coinsAwarded = Math.min(
       quest.rewardCoins,
       MAX_BALANCE - wallet.wallet_coins,
@@ -1042,7 +1051,7 @@ async function claimDailyQuest(worldId, userId, questKey) {
     if (
       coinsAwarded === 0 &&
       gemsAwarded === 0 &&
-      quest.rewardXp === 0
+      xpAwarded === 0
     ) {
       return { claimed: false, reason: "balance_limit" };
     }
@@ -1074,7 +1083,7 @@ async function claimDailyQuest(worldId, userId, questKey) {
       }
     }
 
-    const xpResult = applyXp(player.level, player.xp, quest.rewardXp);
+    const xpResult = applyXp(player.level, player.xp, xpAwarded);
     await client.query(
       `UPDATE endless_wallets
        SET wallet_coins = wallet_coins + $3,
@@ -1083,7 +1092,7 @@ async function claimDailyQuest(worldId, userId, questKey) {
        WHERE world_id = $1 AND user_id = $2`,
       [worldId, userId, coinsAwarded, gemsAwarded],
     );
-    if (quest.rewardXp > 0) {
+    if (xpAwarded > 0) {
       await client.query(
         `UPDATE endless_players
          SET level = $3, xp = $4, updated_at = NOW()
@@ -1104,7 +1113,7 @@ async function claimDailyQuest(worldId, userId, questKey) {
       title: quest.title,
       coinsAwarded,
       gemsAwarded,
-      xpAwarded: quest.rewardXp,
+      xpAwarded,
       levelsGained: xpResult.levelsGained,
       level: xpResult.level,
     };
@@ -1180,6 +1189,14 @@ async function exploreWorld(input) {
         gemChanceBonus += item.effects.gemChanceBonus ?? 0;
       }
     }
+
+    const petResult = await client.query(
+      "SELECT species, loyalty FROM endless_pets WHERE world_id = $1 AND user_id = $2",
+      [input.worldId, input.userId],
+    );
+    const pet = petResult.rows[0];
+    coinBonusPercent += companionRewardPercent(pet?.species, "coins", pet?.loyalty);
+    xpBonusPercent += companionRewardPercent(pet?.species, "xp", pet?.loyalty);
 
     const eventRoll = randomInt(1, 101);
     const event =
@@ -1291,7 +1308,7 @@ async function exploreWorld(input) {
   });
 }
 
-function getCombatStats(equipmentRows, level) {
+function getCombatStats(equipmentRows, level, companion = null) {
   const stats = {
     attackBonus: 0,
     defenseBonus: 0,
@@ -1304,6 +1321,7 @@ function getCombatStats(equipmentRows, level) {
     stats.defenseBonus += item.effects.defenseBonus ?? 0;
     stats.critChanceBonus += item.effects.critChanceBonus ?? 0;
   }
+  stats.attackBonus += companionAttackBonus(companion?.species, companion?.loyalty);
   return {
     ...stats,
     maxHp: 120 + level * 25,
@@ -1507,7 +1525,11 @@ async function fightDungeon(worldId, userId, interactionId) {
        WHERE world_id = $1 AND user_id = $2`,
       [worldId, userId],
     );
-    const combatStats = getCombatStats(equipmentResult.rows, player.level);
+    const petResult = await client.query(
+      "SELECT species, loyalty FROM endless_pets WHERE world_id = $1 AND user_id = $2",
+      [worldId, userId],
+    );
+    const combatStats = getCombatStats(equipmentResult.rows, player.level, petResult.rows[0]);
     const attack = randomInt(15 + player.level * 2, 25 + player.level * 2)
       + combatStats.attackBonus;
     const critical = randomInt(1, 101) <= combatStats.critChance;
@@ -2099,7 +2121,11 @@ async function handlePet(interaction) {
     if (!pet) return interaction.editReply("Henüz bir yoldaşın yok. `/pet adopt` ile Endless ailesine yeni bir dost kat.");
     const species = PET_SPECIES[pet.species];
     const bar = `${"🟩".repeat(Math.ceil(Number(pet.loyalty) / 10))}${"⬛".repeat(10 - Math.ceil(Number(pet.loyalty) / 10))}`;
-    return interaction.editReply(`${species.emoji} **${pet.pet_name}** · ${species.label}\nSadakat: **${pet.loyalty}/100**\n${bar}\nPasif teması: *${species.bonus}*\nBeslemek için: "/pet feed"`);
+    const perkPercent = companionRewardPercent(pet.species, pet.species === "slime" ? "prayerCoins" : pet.species === "owl" ? "xp" : "coins", pet.loyalty);
+    const activePerk = pet.species === "dragon"
+      ? `+${companionAttackBonus(pet.species, pet.loyalty)} hasar`
+      : `+%${perkPercent}`;
+    return interaction.editReply(`${species.emoji} **${pet.pet_name}** · ${species.label}\nSadakat: **${pet.loyalty}/100**\n${bar}\nPasif bonus: *${species.bonus}*\nŞu an etkin: **${activePerk}**\nBesleme: 24 saatte bir, 25 Coin.`);
   }
 
   if (action === "adopt") {
@@ -2117,18 +2143,28 @@ async function handlePet(interaction) {
   }
 
   const result = await inTransaction(async (client) => {
-    const petResult = await client.query("SELECT pet_name, loyalty FROM endless_pets WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, interaction.user.id]);
+    const petResult = await client.query("SELECT pet_name, loyalty, last_fed_at FROM endless_pets WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, interaction.user.id]);
     if (!petResult.rows[0]) return { ok: false, reason: "no_pet" };
+    if (Number(petResult.rows[0].loyalty) >= 100) return { ok: false, reason: "max_loyalty" };
+    const feedReadyAt = petFeedReadyAt(petResult.rows[0].last_fed_at);
+    if (feedReadyAt) return { ok: false, reason: "cooldown", feedReadyAt };
     const walletResult = await client.query("SELECT wallet_coins FROM endless_wallets WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, interaction.user.id]);
     if (!walletResult.rows[0] || Number(walletResult.rows[0].wallet_coins) < 25) return { ok: false, reason: "insufficient_funds" };
-    await insertLedger(client, { worldId, userId: interaction.user.id, currency: "coin", walletDelta: -25, reason: "pet_feed", idempotencyKey: `pet-feed:${interaction.id}` });
+    const ledgerInserted = await insertLedger(client, { worldId, userId: interaction.user.id, currency: "coin", walletDelta: -25, reason: "pet_feed", idempotencyKey: `pet-feed:${interaction.id}` });
+    if (!ledgerInserted) return { ok: false, reason: "duplicate" };
     await client.query("UPDATE endless_wallets SET wallet_coins = wallet_coins - 25, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, interaction.user.id]);
     const nextLoyalty = Math.min(100, Number(petResult.rows[0].loyalty) + 10);
-    await client.query("UPDATE endless_pets SET loyalty = $3, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, interaction.user.id, nextLoyalty]);
-    return { ok: true, petName: petResult.rows[0].pet_name, loyalty: nextLoyalty };
+    const updatedPet = await client.query("UPDATE endless_pets SET loyalty = $3, last_fed_at = NOW(), updated_at = NOW() WHERE world_id = $1 AND user_id = $2 RETURNING last_fed_at + INTERVAL '24 hours' AS feed_ready_at", [worldId, interaction.user.id, nextLoyalty]);
+    return { ok: true, petName: petResult.rows[0].pet_name, loyalty: nextLoyalty, feedReadyAt: updatedPet.rows[0].feed_ready_at };
   });
-  if (!result.ok) return interaction.editReply(result.reason === "no_pet" ? "Önce `/pet adopt` ile bir yoldaş sahiplen." : "Yoldaşını beslemek için en az **25 Coin** gerekiyor.");
-  return interaction.editReply(`🍖 **${result.petName}** mutlu mutlu yemeğini yedi! Sadakat: **${result.loyalty}/100**. ${result.loyalty >= 100 ? "Yoldaşın maksimum sadakate ulaştı!" : "Yarın tekrar besleyebilirsin."}`);
+  if (!result.ok) {
+    if (result.reason === "no_pet") return interaction.editReply("Önce `/pet adopt` ile bir yoldaş sahiplen.");
+    if (result.reason === "max_loyalty") return interaction.editReply("Yoldaşının sadakati zaten **100/100**; besleme için Coin harcamana gerek yok.");
+    if (result.reason === "cooldown") return interaction.editReply(`Yoldaşını yeniden beslemek için <t:${Math.ceil(new Date(result.feedReadyAt).getTime() / 1_000)}:R> bekle.`);
+    if (result.reason === "duplicate") return interaction.editReply("Bu besleme isteği daha önce işlendi.");
+    return interaction.editReply("Yoldaşını beslemek için en az **25 Coin** gerekiyor.");
+  }
+  return interaction.editReply(`🍖 **${result.petName}** mutlu mutlu yemeğini yedi! Sadakat: **${result.loyalty}/100**. Yeniden besleme <t:${Math.ceil(new Date(result.feedReadyAt).getTime() / 1_000)}:R> hazır.`);
 }
 
 const WORLD_BOSS = { key: "ash_colossus", name: "Kül Kolossusu", maxHp: 25_000 };

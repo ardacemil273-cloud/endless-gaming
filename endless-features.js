@@ -1,5 +1,6 @@
 import { randomInt } from "node:crypto";
 import { SlashCommandBuilder } from "discord.js";
+import { addPercentBonus, companionRewardPercent } from "./pet-perks.js";
 
 const COOLDOWN_MS = 60 * 1_000;
 const HUNT_REWARDS = {
@@ -82,6 +83,12 @@ export function createEndlessHandler({ pool, inTransaction, insertLedger, applyX
       const wallet = walletResult.rows[0];
       if (!player || !wallet) return { ok: false, reason: "not_registered" };
 
+      const petResult = await client.query(
+        "SELECT species, loyalty FROM endless_pets WHERE world_id = $1 AND user_id = $2",
+        [worldId, userId],
+      );
+      const pet = petResult.rows[0];
+
       const now = new Date();
       const cooldownUntil = new Date(now.getTime() + COOLDOWN_MS);
       const stateResult = await client.query(
@@ -93,8 +100,11 @@ export function createEndlessHandler({ pool, inTransaction, insertLedger, applyX
 
       const animal = randomAnimal();
       const reward = HUNT_REWARDS[animal.rarity];
-      const coins = Math.min(randomBetween(reward.coins), MAX_BALANCE - Number(wallet.wallet_coins));
-      const xp = reward.xp;
+      const coins = Math.min(
+        addPercentBonus(randomBetween(reward.coins), companionRewardPercent(pet?.species, "coins", pet?.loyalty)),
+        MAX_BALANCE - Number(wallet.wallet_coins),
+      );
+      const xp = addPercentBonus(reward.xp, companionRewardPercent(pet?.species, "xp", pet?.loyalty));
       if (coins > 0) {
         await insertLedger(client, { worldId, userId, currency: "coin", walletDelta: coins, reason: "endless_hunt", idempotencyKey: `endless:hunt:${worldId}:${userId}:${now.toISOString()}` });
       }
@@ -121,15 +131,18 @@ export function createEndlessHandler({ pool, inTransaction, insertLedger, applyX
     return inTransaction(async (client) => {
       const walletResult = await client.query("SELECT wallet_coins, wallet_gems FROM endless_wallets WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, userId]);
       if (!walletResult.rows[0]) return { ok: false, reason: "not_registered" };
+      const petResult = await client.query("SELECT species, loyalty FROM endless_pets WHERE world_id = $1 AND user_id = $2", [worldId, userId]);
+      const pet = petResult.rows[0];
       const now = new Date();
       const stateResult = await client.query("SELECT pray_until FROM endless_collection_state WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, userId]);
       const previous = stateResult.rows[0]?.pray_until;
       if (previous && new Date(previous).getTime() > now.getTime()) return { ok: false, reason: "cooldown", cooldownUntil: previous };
-      const coins = randomInt(35, 151);
-      const gems = randomInt(1, 101) <= 12 ? 1 : 0;
+      const requestedCoins = addPercentBonus(randomInt(35, 151), companionRewardPercent(pet?.species, "prayerCoins", pet?.loyalty));
+      const coins = Math.min(requestedCoins, MAX_BALANCE - Number(walletResult.rows[0].wallet_coins));
+      const gems = randomInt(1, 101) <= 12 && Number(walletResult.rows[0].wallet_gems) < MAX_BALANCE ? 1 : 0;
       if (coins > 0) await insertLedger(client, { worldId, userId, currency: "coin", walletDelta: coins, reason: "endless_pray", idempotencyKey: `endless:pray:${worldId}:${userId}:${now.toISOString()}` });
       if (gems > 0) await insertLedger(client, { worldId, userId, currency: "gem", walletDelta: gems, reason: "endless_pray", idempotencyKey: `endless:pray:${worldId}:${userId}:${now.toISOString()}:gem` });
-      await client.query("UPDATE endless_wallets SET wallet_coins = LEAST(wallet_coins + $3, $4), wallet_gems = LEAST(wallet_gems + $5, $4), updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, userId, coins, MAX_BALANCE, gems]);
+      await client.query("UPDATE endless_wallets SET wallet_coins = wallet_coins + $3, wallet_gems = wallet_gems + $4, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, userId, coins, gems]);
       const cooldownUntil = new Date(now.getTime() + COOLDOWN_MS);
       await client.query(`INSERT INTO endless_collection_state (world_id, user_id, hunt_until, pray_until, gamble_until) VALUES ($1, $2, NULL, $3, NULL) ON CONFLICT (world_id, user_id) DO UPDATE SET pray_until = EXCLUDED.pray_until, updated_at = NOW()`, [worldId, userId, cooldownUntil]);
       return { ok: true, coins, gems, cooldownUntil };
