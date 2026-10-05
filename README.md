@@ -12,10 +12,10 @@ Discord sunucularını ayrı oyun dünyalarına dönüştüren, PostgreSQL deste
 - Market, envanter, ekipman bonusları ve tüketilebilir eşyalar
 - **Eğlence merkezi:** 12 alt komutla şans oyunları, trivia, şaka, söz, vibe, iltifat, dostça roast ve takım uyumu
 - **`/endless` koleksiyon merkezi:** hayvan avı, kalıcı hayvan koleksiyonu, zoo görünümü, dua ödülü, Coin transferi, kontrollü bahis ve sosyal etkileşimler
-- **ENDLESS oyun merkezi:** `/games slots`, adım adım oynanan blackjack, hücre seçimli mayın tarlası ve oyun içi Coin bahisleri
+- **ENDLESS oyun merkezi:** `/games slots`, 52 kartlık desteli ve 3:2 doğal blackjack ödüllü oyun (açık el ve kalan deste veritabanında saklanır; `/games blackjack-status` ile geri açılır), hücre seçimli mayın tarlası ve Coin bahisleri
 - **Endless Arcade genişletmesi:** rulet, crash ve veritabanına kaydedilen günlük ücretsiz Şans Çarkı
 - **Başarım Salonu:** `/achievements show` ile kalıcı rozet ilerlemesi, `/achievements claim` ile tek seferlik Coin/Gem/XP ödülleri
-- **Endless Yoldaşlar:** `/pet adopt`, `/pet show` ve `/pet feed` ile dört türden bir yoldaş sahiplenme, isim verme ve sadakat geliştirme
+- **Endless Yoldaşlar:** `/pet adopt`, `/pet show` ve 24 saatte bir `/pet feed`; sadakat artık türüne göre keşif/av Coin'i, XP, zindan hasarı veya dua ödülünü güçlendirir
 - **Dünya Boss Raid:** `/event status`, `/event attack` ve `/event leaderboard` ile bütün sunucunun birlikte savaştığı ortak Kül Kolossusu
 - **Endless Arena PvP:** `/arena duel`, `/arena stats` ve `/arena leaderboard` ile güvenli Coin bahisli düello ve rating sistemi
 - **Özgün sosyal animasyonlar:** `/social hug`, `/social kiss`, `/social cuddle`, `/social pat`, `/social highfive` ve `/social boop` Discord mesajını adım adım günceller.
@@ -44,16 +44,21 @@ Discord uygulamasında bot için `Guilds` intent yeterlidir. Bot açılışta `d
 5. Sağlık kontrolünü `GET /api/healthz` olarak tanımla.
 6. Discord Developer Portal'da botu sunuculara `bot` ve `applications.commands` scope'larıyla davet et.
 
+Docker destekli bir hosting'de `docker build -t endless .` ile imaj oluşturup `docker run -d --name endless --restart unless-stopped --env-file .env -p 3000:3000 endless` ile çalıştırabilirsin. `.env` dosyası yalnızca sunucuda tutulmalı. GitHub deposu kaynak kodunu tutar; Discord botunu tek başına sürekli çalıştırmaz. Canlı bot için ayrı ve kesintisiz bir Node.js/Docker hosting'i ile PostgreSQL bağlantısı gerekir.
+
 ## Yeni başlayanlar için kod rehberi
 
 Detaylı açıklama için [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) dosyasına bak. Kısaca:
 
-- `index.js`: PostgreSQL bağlantısını, Discord istemcisini, slash komut kaydını ve ortak ekonomi fonksiyonlarını başlatır.
-- `games.js`: slot, blackjack, mayın, rulet, crash, günlük çark ve sosyal komutların oyun kurallarını içerir.
+- `index.js`: Tek JavaScript kaynak dosyasıdır; PostgreSQL bağlantısı, Discord istemcisi, slash komutlar, ekonomi, oyunlar, eğlence, koleksiyon ve yoldaş sistemlerinin tüm handler'larını içerir. `npm start` bu dosyayı çalıştırır.
 - `database/schema.sql`: botun kullandığı tabloları güvenli ve tekrar çalıştırılabilir biçimde oluşturur.
 - `assets/gifs/`: Discord'da gönderilen özgün Endless sosyal animasyonlarıdır.
 - `endless_achievement_claims`: başarımların ödülünün iki kez verilmesini engeller.
 - `endless_pets`: oyuncunun yoldaş türünü, adını ve 1–100 arasındaki sadakat seviyesini saklar.
+- `endless_blackjack_sessions` ve `endless_blackjack_actions`: açık elleri, kalan karıştırılmış desteyi ve işlenmiş hamle kimliklerini saklar; bot yeniden başlatıldığında aynı el sürer ve aynı Discord hamlesi ikinci kez uygulanmaz.
+- `test/`: oyun kuralları ve yoldaş bonusları için `npm test` ile çalışan regresyon testleri.
+- Yoldaş besleme zamanı `endless_pets.last_fed_at` alanında saklanır; şema bu alanı mevcut kurulumlara otomatik ve güvenli biçimde ekler.
+- Yoldaş pasifleri her 10 sadakatte %1 artar (en çok %10); ejderha zindan hasarına her 20 sadakatte +1 (en çok +5) verir. Sadakati 100 olan yoldaş tekrar beslenemez ve Coin harcanmaz.
 - `endless_world_events` ve `endless_world_event_contributions`: ortak boss canını ve oyuncuların hasar katkılarını saklar.
 - `endless_arena_stats` ve `endless_arena_matches`: PvP rating, galibiyet/mağlubiyet ve maç sonucunu saklar.
 - Para hareketlerinde önce ledger kaydı, sonra bakiye güncellemesi yapılır; böylece aynı Discord isteği iki kez ödül veremez.

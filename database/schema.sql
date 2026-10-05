@@ -209,11 +209,14 @@ CREATE TABLE IF NOT EXISTS endless_pets (
   species TEXT NOT NULL CHECK (species IN ('fox', 'dragon', 'owl', 'slime')),
   pet_name TEXT NOT NULL,
   loyalty INTEGER NOT NULL DEFAULT 1 CHECK (loyalty BETWEEN 1 AND 100),
+  last_fed_at TIMESTAMPTZ,
   adopted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (world_id, user_id),
   FOREIGN KEY (world_id, user_id) REFERENCES endless_players(world_id, user_id) ON DELETE CASCADE
 );
+
+ALTER TABLE endless_pets ADD COLUMN IF NOT EXISTS last_fed_at TIMESTAMPTZ;
 
 -- Sunucudaki bütün oyuncuların birlikte savaştığı ortak Dünya Boss'u.
 CREATE TABLE IF NOT EXISTS endless_world_events (
@@ -260,3 +263,32 @@ CREATE TABLE IF NOT EXISTS endless_arena_matches (
 );
 
 CREATE INDEX IF NOT EXISTS endless_collection_animals_rarity_idx ON endless_collection_animals (world_id, user_id, rarity);
+
+CREATE TABLE IF NOT EXISTS endless_blackjack_sessions (
+  world_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  interaction_id TEXT NOT NULL UNIQUE,
+  player_hand JSONB NOT NULL CHECK (jsonb_typeof(player_hand) = 'array'),
+  dealer_hand JSONB NOT NULL CHECK (jsonb_typeof(dealer_hand) = 'array'),
+  deck JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(deck) = 'array'),
+  bet BIGINT NOT NULL CHECK (bet > 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (world_id, user_id),
+  FOREIGN KEY (world_id, user_id) REFERENCES endless_wallets(world_id, user_id) ON DELETE CASCADE
+);
+
+ALTER TABLE endless_blackjack_sessions
+  ADD COLUMN IF NOT EXISTS deck JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+CREATE TABLE IF NOT EXISTS endless_blackjack_actions (
+  world_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  interaction_id TEXT NOT NULL,
+  action TEXT NOT NULL CHECK (action IN ('hit', 'stand', 'cancel')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (world_id, user_id, interaction_id),
+  FOREIGN KEY (world_id, user_id) REFERENCES endless_wallets(world_id, user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS endless_blackjack_actions_created_idx ON endless_blackjack_actions (created_at);
