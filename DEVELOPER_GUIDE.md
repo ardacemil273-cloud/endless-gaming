@@ -11,7 +11,7 @@ Bu dosya, projeyi ilk kez açan birinin botun nasıl çalıştığını anlayabi
 5. Express sağlık adresini açar: `GET /api/healthz`.
 6. Discord Gateway'e bağlanır ve gelen komutları ilgili handler fonksiyonuna yollar.
 
-> Özet: `index.js` botun trafik polisi, `games.js` oyun salonu, `schema.sql` ise veritabanı planıdır.
+> Özet: JavaScript uygulamasının tamamı `index.js` içindedir; `database/schema.sql` ise veritabanı planıdır.
 
 ## 2. Bir slash komutu nasıl çalışır?
 
@@ -19,7 +19,7 @@ Bu dosya, projeyi ilk kez açan birinin botun nasıl çalıştığını anlayabi
 
 1. Discord komutu `index.js` içindeki `handleInteraction` fonksiyonuna gelir.
 2. Komut adı `games` olduğu için `handleGames` çağrılır.
-3. `games.js`, alt komutun `slots` olduğunu görür.
+3. `index.js` içindeki oyun handler'ı alt komutun `slots` olduğunu görür.
 4. `walletBet` PostgreSQL transaction başlatır ve Coin bakiyesini kilitler.
 5. Yeterli Coin varsa ledger'a negatif hareket yazılır ve cüzdandan bahis düşülür.
 6. Slot sonucu üretilir.
@@ -28,16 +28,18 @@ Bu dosya, projeyi ilk kez açan birinin botun nasıl çalıştığını anlayabi
 
 Bu yapı sayesinde bot kapanıp tekrar açılsa bile Coin hareketlerinin geçmişi `endless_ledger` tablosunda kalır.
 
+Blackjack'te bahis düşümü ve el kaydı aynı transaction içinde yapılır. Oyuncu/eldeki durum `endless_blackjack_sessions` tablosunda; `hit`, `stand` ve `cancel` etkileşim kimlikleri `endless_blackjack_actions` tablosunda saklanır. Hamleler wallet satırını önce kilitlediği ve sonra eli güncellediği için eşzamanlı komutlar ikinci kez kart çekemez veya ödeme alamaz. Bot yeniden başlatılırsa `/games blackjack-status` mevcut eli geri gösterir.
+
 ## 3. Dosyaları nerede değiştirmeliyim?
 
 | İhtiyaç | Dosya |
 |---|---|
-| Yeni slash komutu tanımlamak | İlgili modülün `SlashCommandBuilder` bölümü |
+| Yeni slash komutu tanımlamak | `index.js` içindeki ilgili `SlashCommandBuilder` ve handler |
 | Kalıcı rozet/ödül eklemek | `ACHIEVEMENTS`, `getAchievementProgress` ve `endless_achievement_claims` tablosu |
 | Yeni yoldaş türü eklemek | `PET_SPECIES` haritası ve `endless_pets.species` CHECK kuralı |
 | Ortak sunucu etkinliği eklemek | `endless_world_events`, katkı tablosu ve `handleWorldEvent` transaction akışı |
 | PvP sistemi eklemek | `handleArena`, `endless_arena_stats` ve `endless_arena_matches` tabloları |
-| Oyun kuralını değiştirmek | `games.js` içindeki ilgili fonksiyon |
+| Oyun kuralını değiştirmek | `index.js` içindeki ilgili oyun fonksiyonu |
 | Yeni tablo veya kalıcı veri eklemek | `database/schema.sql` |
 | Sosyal GIF eklemek/değiştirmek | `assets/gifs/` ve `SOCIAL_GIFS` haritası |
 | Genel cüzdan/ledger davranışını değiştirmek | `index.js` içindeki `inTransaction`, `insertLedger` veya ekonomi fonksiyonları |
@@ -90,7 +92,7 @@ async function yeniOyun(interaction) {
 ## 5. GIF sistemi nasıl çalışır?
 
 - GIF dosyaları `assets/gifs/endless-*.gif` biçiminde tutulur.
-- `games.js`, `fileURLToPath(new URL(...))` ile bu dosyaların deploy içindeki gerçek yolunu bulur.
+- `index.js`, `fileURLToPath(new URL(...))` ile bu dosyaların deploy içindeki gerçek yolunu bulur.
 - Sosyal komut önce mesajı üç ara kareyle günceller.
 - Son karede `AttachmentBuilder` GIF'i Discord mesajına ekler.
 - Yeni bir hareket eklemek için aynı isimde bir GIF üret, `SOCIAL_GIFS` içine eşleştir ve `socialCommand` içine alt komut ekle.
@@ -106,7 +108,7 @@ GIF'ler bu sürümde programatik olarak Endless renkleri, orbit deseni ve hareke
 - Günlük çark `endless_daily_spins` tablosunda UTC tarihine göre tutulur.
 - Başarımlar mevcut oyun hareketlerini ölçer; ödül alındığında `endless_achievement_claims` tablosuna kilit yazılır. Bu kilit, aynı ödülün tekrar verilmesini engeller.
 - Yoldaş sistemi `endless_pets` tablosunda tek satır/oyuncu kuralıyla çalışır. `/pet feed` 24 saatlik bekleme süresini `last_fed_at` ile veritabanında saklar; önce Coin'i transaction içinde düşürür, sonra sadakati 10 puan artırır. Maksimum sadakatte veya bekleme süresinde Coin alınmaz.
-- `pet-perks.js` hesaplamaları tek yerde tutar: tilki keşif/av Coin'ini, baykuş keşif/av/görev XP'sini, slime dua Coin'ini her 10 sadakatte %1 artırır; ejderha zindan saldırısına her 20 sadakatte +1 hasar ekler. Bonuslar üst sınırla ve birim testleriyle korunur.
+- Yoldaş bonus hesaplamaları `index.js` içinde tek yerde tutulur: tilki keşif/av Coin'ini, baykuş keşif/av/görev XP'sini, slime dua Coin'ini her 10 sadakatte %1 artırır; ejderha zindan saldırısına her 20 sadakatte +1 hasar ekler. Bonuslar üst sınırla ve birim testleriyle korunur.
 - Dünya Boss saldırısı boss satırını kilitler, saldırı ücretini ledger'a yazar, canı azaltır ve oyuncunun katkısını artırır. Aynı Discord interaction ID'si tekrar gelirse ledger idempotency anahtarı ikinci saldırıyı engeller.
 - Arena düellosunda iki oyuncunun cüzdanı önce kilitlenir. İki bahis düşmeden skor hesaplanmaz. Kazanan toplam potu alır; rating kazanan için artar, kaybeden için azalır.
 
@@ -130,3 +132,5 @@ Gizli anahtarları GitHub'a gönderme. Üretimde ortam değişkeni olarak tanım
 ## 8. Deploy notu
 
 Discord Gateway bağlantısı sürekli açık bir Node.js süreci ister. Bu nedenle botu yalnızca kısa ömürlü serverless fonksiyonlarda çalıştırma. Node 22 kullanan ve `npm start` komutunu sürekli çalıştıran bir servis seç. Sağlık kontrolü için `/api/healthz` adresini kullan.
+
+Depoda genel kullanıma uygun `Dockerfile` ve `.dockerignore` bulunur. `docker build -t endless .` imajı üretir; container'a `DISCORD_BOT_TOKEN` ve `DATABASE_URL` gizli environment değerleri olarak verilir. GitHub deposu botu çalıştıran hosting değildir; canlı dağıtım için sürekli çalışan bir hosting hesabı ve erişilebilir PostgreSQL veritabanı gereklidir.

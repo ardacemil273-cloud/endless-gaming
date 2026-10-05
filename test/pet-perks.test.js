@@ -5,7 +5,7 @@ import {
   companionAttackBonus,
   companionRewardPercent,
   petFeedReadyAt,
-} from "../pet-perks.js";
+} from "../index.js";
 
 test("species reward perks match only their intended activity", () => {
   assert.equal(companionRewardPercent("fox", "coins", 80), 8);
