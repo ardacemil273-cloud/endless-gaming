@@ -179,4 +179,17 @@ CREATE TABLE IF NOT EXISTS endless_collection_animals (
   FOREIGN KEY (world_id, user_id) REFERENCES endless_players(world_id, user_id) ON DELETE CASCADE
 );
 
+-- Her oyuncu günde yalnızca bir kez ücretsiz Endless Şans Çarkı çevirebilir.
+-- Tarihi veritabanında tuttuğumuz için bot yeniden başlasa bile hak sıfırlanmaz.
+CREATE TABLE IF NOT EXISTS endless_daily_spins (
+  world_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  spin_date DATE NOT NULL,
+  reward_type TEXT NOT NULL CHECK (reward_type IN ('coin', 'gem')),
+  reward_amount BIGINT NOT NULL CHECK (reward_amount > 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (world_id, user_id, spin_date),
+  FOREIGN KEY (world_id, user_id) REFERENCES endless_players(world_id, user_id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS endless_collection_animals_rarity_idx ON endless_collection_animals (world_id, user_id, rarity);

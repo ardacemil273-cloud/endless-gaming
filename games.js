@@ -1,10 +1,13 @@
 import { randomInt } from "node:crypto";
-import { SlashCommandBuilder } from "discord.js";
+import { fileURLToPath } from "node:url";
+import { AttachmentBuilder, SlashCommandBuilder } from "discord.js";
 
 const MAX_BET = 100_000;
 const SOCIAL_COOLDOWN_MS = 2_000;
 const socialCooldowns = new Map();
 const blackjackSessions = new Map();
+const ASSET_ROOT = fileURLToPath(new URL("./assets/gifs/", import.meta.url));
+const SOCIAL_GIFS = Object.fromEntries(Object.keys({ hug: 1, kiss: 1, cuddle: 1, pat: 1, highfive: 1, boop: 1 }).map((name) => [name, `${ASSET_ROOT}/endless-${name}.gif`]));
 
 const SLOTS = [
   { icon: "🍒", weight: 30, multiplier: 2 },
@@ -35,6 +38,9 @@ export const gamesCommand = new SlashCommandBuilder()
   .addSubcommand((sub) => sub.setName("blackjack-stand").setDescription("Blackjack elinde kal ve dağıtıcıyla karşılaştır."))
   .addSubcommand((sub) => sub.setName("blackjack-cancel").setDescription("Açık blackjack elini iptal et ve bahsi iade al."))
   .addSubcommand((sub) => sub.setName("mines").setDescription("Gizli mayınlardan kaçınarak ödül çarpanını büyüt.").addIntegerOption((option) => option.setName("amount").setDescription("Bahis miktarı.").setMinValue(1).setMaxValue(MAX_BET).setRequired(true)).addIntegerOption((option) => option.setName("cell").setDescription("1-9 arasında bir hücre seç.").setMinValue(1).setMaxValue(9).setRequired(true)))
+  .addSubcommand((sub) => sub.setName("roulette").setDescription("Kırmızı, siyah veya yeşil rulet rengi seç.").addIntegerOption((option) => option.setName("amount").setDescription("Bahis miktarı.").setMinValue(1).setMaxValue(MAX_BET).setRequired(true)).addStringOption((option) => option.setName("color").setDescription("Tahmin edeceğin renk.").setRequired(true).addChoices({ name: "Kırmızı", value: "red" }, { name: "Siyah", value: "black" }, { name: "Yeşil", value: "green" })))
+  .addSubcommand((sub) => sub.setName("crash").setDescription("Çarpan patlamadan önce güvenli kazancı yakala.").addIntegerOption((option) => option.setName("amount").setDescription("Bahis miktarı.").setMinValue(1).setMaxValue(MAX_BET).setRequired(true)).addNumberOption((option) => option.setName("cashout").setDescription("Hedef çarpan: 1.10 ile 5.00 arası.").setMinValue(1.1).setMaxValue(5).setRequired(true)))
+  .addSubcommand((sub) => sub.setName("daily-spin").setDescription("Her gün bir kez Endless Şans Çarkı çevir."))
   .addSubcommand((sub) => sub.setName("help").setDescription("Oyunların nasıl oynandığını gör."));
 
 export const socialCommand = new SlashCommandBuilder()
@@ -142,10 +148,68 @@ devam: "/games blackjack-hit" veya "/games blackjack-stand"`);
     const payout = Math.floor(amount * (1.55 + (cell % 3) * 0.2)); await walletPayout({ pool, inTransaction, insertLedger, worldId: interaction.guildId, userId: interaction.user.id, amount: payout, reason: "mines_payout", interactionId: interaction.id });
     return interaction.editReply(`✅ Hücre **${cell}** güvenli! **${payout.toLocaleString("tr-TR")} Coin** çekildi. Tahta: ▫️ ▫️ ▫️ ▫️ ▫️ ▫️ ▫️ ▫️ ▫️ ▫️`);
   }
+
+  // Rulette önce bahis cüzdandan güvenli transaction ile düşer; sonra tek bir renk çekilir.
+  async function roulette(interaction) {
+    const amount = interaction.options.getInteger("amount", true);
+    const chosenColor = interaction.options.getString("color", true);
+    const debit = await walletBet({ pool, inTransaction, insertLedger, worldId: interaction.guildId, userId: interaction.user.id, amount, reason: "roulette_bet", interactionId: interaction.id });
+    if (!debit.ok) return interaction.editReply(notRegistered(debit) || "Rulet için yeterli Coin yok.");
+    await animate(interaction, ["🎡 Endless ruleti hazırlanıyor...", "🎡 Top dönüyor...", "🎡 Renk kilitleniyor..."]);
+    const number = randomInt(0, 37);
+    const resultColor = number === 0 ? "green" : number <= 18 ? "red" : "black";
+    const multiplier = resultColor === "green" ? 14 : 2;
+    const payout = resultColor === chosenColor ? amount * multiplier : 0;
+    if (payout) await walletPayout({ pool, inTransaction, insertLedger, worldId: interaction.guildId, userId: interaction.user.id, amount: payout, reason: "roulette_payout", interactionId: interaction.id });
+    const labels = { red: "Kırmızı", black: "Siyah", green: "Yeşil" };
+    return interaction.editReply(`🎡 Top **${number}** üzerinde durdu: **${labels[resultColor]}**.\n${payout ? `🏆 Tahminin tuttu! **${payout.toLocaleString("tr-TR")} Coin** kazandın.` : `🌑 Bu turda **${amount.toLocaleString("tr-TR")} Coin** kaybettin.`}`);
+  }
+
+  // Crash oyununda çarpanı baştan hedeflersin. Sistem rastgele patlama noktası üretir.
+  async function crash(interaction) {
+    const amount = interaction.options.getInteger("amount", true);
+    const cashout = interaction.options.getNumber("cashout", true);
+    const debit = await walletBet({ pool, inTransaction, insertLedger, worldId: interaction.guildId, userId: interaction.user.id, amount, reason: "crash_bet", interactionId: interaction.id });
+    if (!debit.ok) return interaction.editReply(notRegistered(debit) || "Crash için yeterli Coin yok.");
+    await animate(interaction, ["🚀 Endless roketi kalkıyor...", "🚀 Çarpan yükseliyor...", `🚀 Hedef **x${cashout.toFixed(2)}** olarak ayarlandı...`]);
+    const crashPoint = Math.round((1.1 + randomInt(0, 391) / 100) * 100) / 100;
+    if (cashout > crashPoint) return interaction.editReply(`💥 Roket **x${crashPoint.toFixed(2)}** noktasında patladı. **${amount.toLocaleString("tr-TR")} Coin** kaybedildi.`);
+    const payout = Math.floor(amount * cashout);
+    await walletPayout({ pool, inTransaction, insertLedger, worldId: interaction.guildId, userId: interaction.user.id, amount: payout, reason: "crash_payout", interactionId: interaction.id });
+    return interaction.editReply(`🚀 Zamanında çektin: **x${cashout.toFixed(2)}**! **${payout.toLocaleString("tr-TR")} Coin** hesabına geçti.`);
+  }
+
+  // Şans Çarkı kalıcıdır: aynı UTC gününde ikinci kez çevrilmesine veritabanı izin vermez.
+  async function dailySpin(interaction) {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await inTransaction(async (client) => {
+      const player = await client.query("SELECT 1 FROM endless_players WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [interaction.guildId, interaction.user.id]);
+      if (!player.rows[0]) return { ok: false, reason: "not_registered" };
+      const rewardType = randomInt(1, 101) <= 12 ? "gem" : "coin";
+      const rewardAmount = rewardType === "gem" ? randomInt(1, 4) : randomInt(75, 301);
+      const inserted = await client.query("INSERT INTO endless_daily_spins (world_id, user_id, spin_date, reward_type, reward_amount) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (world_id, user_id, spin_date) DO NOTHING RETURNING reward_type, reward_amount", [interaction.guildId, interaction.user.id, today, rewardType, rewardAmount]);
+      if (!inserted.rows[0]) return { ok: false, reason: "already_spun" };
+      await insertLedger(client, { worldId: interaction.guildId, userId: interaction.user.id, currency: rewardType, walletDelta: rewardAmount, reason: "daily_spin", idempotencyKey: `daily-spin:${interaction.guildId}:${interaction.user.id}:${today}` });
+      const column = rewardType === "gem" ? "wallet_gems" : "wallet_coins";
+      await client.query(`UPDATE endless_wallets SET ${column} = LEAST(${column} + $3, $4), updated_at = NOW() WHERE world_id = $1 AND user_id = $2`, [interaction.guildId, interaction.user.id, rewardAmount, 2_000_000_000]);
+      return { ok: true, rewardType, rewardAmount };
+    });
+    if (!result.ok) return interaction.editReply(result.reason === "not_registered" ? "Önce `/start` ile karakter oluştur." : "Bugünkü Şans Çarkı hakkını zaten kullandın. Yarın tekrar dön!");
+    await animate(interaction, ["🎁 Endless Şans Çarkı açılıyor...", "🎁 Işıklar dönüyor...", "🎁 Ödül cebine ışınlanıyor..."]);
+    return interaction.editReply(`🎁 Günlük ödülün hazır: **${result.rewardAmount} ${result.rewardType === "gem" ? "Gem" : "Coin"}**! Yarın yeniden gel.`);
+  }
   return async function handleGames(interaction) {
     const action = interaction.options.getSubcommand(); await interaction.deferReply({ ephemeral: false });
-    if (action === "help") return interaction.editReply("**ENDLESS Oyunları**\n`/games slots amount:50` — Slot\n`/games blackjack amount:50` — Blackjack başlat; sonra hit/stand kullan\n`/games mines amount:50 cell:4` — 1-9 hücre seç\nBahisler Coin cüzdanından düşer; kazançlar otomatik eklenir.");
-    if (action === "slots") return slots(interaction); if (action === "blackjack") return blackjackStart(interaction); if (action === "blackjack-hit") return blackjackAction(interaction, "hit"); if (action === "blackjack-stand") return blackjackAction(interaction, "stand"); if (action === "blackjack-cancel") return blackjackCancel(interaction); return mines(interaction);
+    if (action === "help") return interaction.editReply("**ENDLESS Oyunları**\n`/games slots amount:50` — Slot\n`/games blackjack amount:50` — Blackjack başlat; sonra hit/stand kullan\n`/games mines amount:50 cell:4` — 1-9 hücre seç\n`/games roulette amount:50 color:red` — Rulet rengi tahmini\n`/games crash amount:50 cashout:2` — x2 olmadan önce güvenli çek\n`/games daily-spin` — Her gün bir kez ücretsiz çark\nBahisler Coin cüzdanından düşer; kazançlar otomatik eklenir.");
+    if (action === "slots") return slots(interaction);
+    if (action === "blackjack") return blackjackStart(interaction);
+    if (action === "blackjack-hit") return blackjackAction(interaction, "hit");
+    if (action === "blackjack-stand") return blackjackAction(interaction, "stand");
+    if (action === "blackjack-cancel") return blackjackCancel(interaction);
+    if (action === "mines") return mines(interaction);
+    if (action === "roulette") return roulette(interaction);
+    if (action === "crash") return crash(interaction);
+    return dailySpin(interaction);
   };
 }
 
@@ -157,5 +221,11 @@ export async function handleSocial(interaction) {
   socialCooldowns.set(key, Date.now()); const action = interaction.options.getSubcommand(); const frames = SOCIAL_LINES[action]; const name = userName(target);
   await interaction.deferReply();
   const personalized = frames.map((frame) => frame.replace("sarıldı", `**${name}** ile sarıldı`).replace("öpücük gönderdi", `**${name}** oyuncusuna öpücük gönderdi`).replace("bir kucaklaşma molası başladı", `**${name}** ile kucaklaşma molası başladı`).replace("usulca okşadı", `**${name}** oyuncusunu usulca okşadı`).replace("ile kusursuz çak", `**${name}** ile kusursuz çak`).replace("burnuna tatlı bir pıt yaptı", `**${name}** oyuncusunun burnuna tatlı bir pıt yaptı`));
-  return animate(interaction, personalized);
+  await animate(interaction, personalized);
+  const gifPath = SOCIAL_GIFS[action];
+  return interaction.editReply({
+    content: `${personalized.at(-1)}\n🎞️ **Endless özel animasyonu**`,
+    files: gifPath ? [new AttachmentBuilder(gifPath)] : [],
+    allowedMentions: { parse: [] },
+  });
 }

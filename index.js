@@ -14,6 +14,8 @@ import {
 } from "discord.js";
 import { funCommand, handleFun } from "./fun.js";
 import { createEndlessHandler, endlessCommand } from "./endless-features.js";
+// Oyunlar ayrı modülde tutulur; böylece yeni başlayan biri ekonomiyi ve oyun kurallarını
+// index.js içindeki büyük Discord başlangıç dosyasından bağımsız okuyabilir.
 import { createGamesHandler, gamesCommand, handleSocial, socialCommand } from "./games.js";
 
 const { Pool } = pg;
@@ -1991,6 +1993,8 @@ const helpText = [
   "`/games slots` — ENDLESS slot makinesinde Coin bahis yap.",
   "`/games blackjack` — Blackjack eli başlat; `blackjack-hit`, `blackjack-stand` veya `blackjack-cancel` ile yönet.",
   "`/games mines` — 1-9 arasından hücre seç, mayına basmadan ödül kazan.",
+  "`/games roulette` / `/games crash` — Renk ruleti veya patlamadan önce çarpan yakalama oyunu.",
+  "`/games daily-spin` — Veritabanına kaydedilen günlük ücretsiz Şans Çarkı ödülünü al.",
   "`/social hug` / `/social kiss` / `/social cuddle` / `/social pat` / `/social highfive` / `/social boop` — Özgün Endless animasyonları gönder.",
   "",
   "Her Discord sunucusu ayrı bir dünyadır. Karakterin ve ekonomin dünyaya özeldir. Günlük ödül ve görevler UTC gece yarısında yenilenir; keşifler arasında 5 dakika bekleme vardır.",
