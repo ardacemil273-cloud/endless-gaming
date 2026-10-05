@@ -34,6 +34,7 @@ Bu yapı sayesinde bot kapanıp tekrar açılsa bile Coin hareketlerinin geçmi�
 |---|---|
 | Yeni slash komutu tanımlamak | İlgili modülün `SlashCommandBuilder` bölümü |
 | Kalıcı rozet/ödül eklemek | `ACHIEVEMENTS`, `getAchievementProgress` ve `endless_achievement_claims` tablosu |
+| Yeni yoldaş türü eklemek | `PET_SPECIES` haritası ve `endless_pets.species` CHECK kuralı |
 | Oyun kuralını değiştirmek | `games.js` içindeki ilgili fonksiyon |
 | Yeni tablo veya kalıcı veri eklemek | `database/schema.sql` |
 | Sosyal GIF eklemek/değiştirmek | `assets/gifs/` ve `SOCIAL_GIFS` haritası |
@@ -102,6 +103,7 @@ GIF'ler bu sürümde programatik olarak Endless renkleri, orbit deseni ve hareke
 - SQL içindeki dinamik sütun adı yalnızca kodun sabit seçtiği `wallet_coins` veya `wallet_gems` değerlerinden gelir; kullanıcı metni SQL'e doğrudan eklenmez.
 - Günlük çark `endless_daily_spins` tablosunda UTC tarihine göre tutulur.
 - Başarımlar mevcut oyun hareketlerini ölçer; ödül alındığında `endless_achievement_claims` tablosuna kilit yazılır. Bu kilit, aynı ödülün tekrar verilmesini engeller.
+- Yoldaş sistemi `endless_pets` tablosunda tek satır/oyuncu kuralıyla çalışır. `/pet feed` önce Coin'i transaction içinde düşürür, sonra sadakati 10 puan artırır; işlem yarıda kalırsa ikisi de geri alınır.
 
 ## 7. Yerelde test
 

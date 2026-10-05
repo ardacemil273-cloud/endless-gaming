@@ -202,4 +202,17 @@ CREATE TABLE IF NOT EXISTS endless_achievement_claims (
   FOREIGN KEY (world_id, user_id) REFERENCES endless_players(world_id, user_id) ON DELETE CASCADE
 );
 
+-- Her oyuncunun her dünyada bir adet özgün yoldaşı olur.
+CREATE TABLE IF NOT EXISTS endless_pets (
+  world_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  species TEXT NOT NULL CHECK (species IN ('fox', 'dragon', 'owl', 'slime')),
+  pet_name TEXT NOT NULL,
+  loyalty INTEGER NOT NULL DEFAULT 1 CHECK (loyalty BETWEEN 1 AND 100),
+  adopted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (world_id, user_id),
+  FOREIGN KEY (world_id, user_id) REFERENCES endless_players(world_id, user_id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS endless_collection_animals_rarity_idx ON endless_collection_animals (world_id, user_id, rarity);

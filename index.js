@@ -145,6 +145,13 @@ const ACHIEVEMENTS = [
   { key: "dungeon_master", title: "Zindan Ustası", description: "Kül Harabeleri'ni en az bir kez temizle.", rewardCoins: 500, rewardGems: 4, rewardXp: 100 },
 ];
 
+const PET_SPECIES = {
+  fox: { label: "Kristal Tilki", emoji: "🦊", bonus: "Keşiflerde şans enerjisi" },
+  dragon: { label: "Kül Ejderhası", emoji: "🐉", bonus: "Zindanlarda cesaret" },
+  owl: { label: "Bilge Baykuş", emoji: "🦉", bonus: "Görevlerde bilgi" },
+  slime: { label: "Neşe Slime'ı", emoji: "🟢", bonus: "Sosyal komutlarda neşe" },
+};
+
 function itemPriceLabel(item) {
   const currency = CURRENCY_COLUMNS[item.price.currency].label;
   return `${item.price.amount.toLocaleString("tr-TR")} ${currency}`;
@@ -455,6 +462,18 @@ const commandData = [
             .addChoices(...ACHIEVEMENTS.map(({ key, title }) => ({ name: title, value: key }))),
         ),
     ),
+  new SlashCommandBuilder()
+    .setName("pet")
+    .setDescription("Kendi Endless Yoldaşını sahiplen, besle ve sadakatini artır.")
+    .addSubcommand((subcommand) =>
+      subcommand
+        .setName("adopt")
+        .setDescription("Bir yoldaş sahiplen ve ona isim ver.")
+        .addStringOption((option) => option.setName("species").setDescription("Yoldaş türü.").setRequired(true).addChoices({ name: "Kristal Tilki", value: "fox" }, { name: "Kül Ejderhası", value: "dragon" }, { name: "Bilge Baykuş", value: "owl" }, { name: "Neşe Slime'ı", value: "slime" }))
+        .addStringOption((option) => option.setName("name").setDescription("Yoldaşının adı.").setMinLength(2).setMaxLength(24).setRequired(true)),
+    )
+    .addSubcommand((subcommand) => subcommand.setName("show").setDescription("Yoldaşını ve sadakat seviyesini gör."))
+    .addSubcommand((subcommand) => subcommand.setName("feed").setDescription("25 Coin harcayarak yoldaşının sadakatini artır.")),
   funCommand,
   endlessCommand,
   gamesCommand,
@@ -2056,6 +2075,50 @@ async function handleAchievements(interaction) {
   return interaction.editReply(`🏅 **${achievement.title}** rozeti açıldı! **${achievement.rewardCoins} Coin**, **${achievement.rewardGems} Gem** ve **${achievement.rewardXp} XP** kazandın.${reward.levelsGained ? ` Yeni seviyen: **${reward.level}**!` : ""}`);
 }
 
+async function handlePet(interaction) {
+  const worldId = await requireGuild(interaction, "Yoldaş sistemi");
+  if (!worldId) return;
+  await interaction.deferReply({ ephemeral: false });
+  const action = interaction.options.getSubcommand();
+
+  if (action === "show") {
+    const result = await pool.query("SELECT species, pet_name, loyalty, adopted_at FROM endless_pets WHERE world_id = $1 AND user_id = $2 LIMIT 1", [worldId, interaction.user.id]);
+    const pet = result.rows[0];
+    if (!pet) return interaction.editReply("Henüz bir yoldaşın yok. `/pet adopt` ile Endless ailesine yeni bir dost kat.");
+    const species = PET_SPECIES[pet.species];
+    const bar = `${"🟩".repeat(Math.ceil(Number(pet.loyalty) / 10))}${"⬛".repeat(10 - Math.ceil(Number(pet.loyalty) / 10))}`;
+    return interaction.editReply(`${species.emoji} **${pet.pet_name}** · ${species.label}\nSadakat: **${pet.loyalty}/100**\n${bar}\nPasif teması: *${species.bonus}*\nBeslemek için: "/pet feed"`);
+  }
+
+  if (action === "adopt") {
+    const speciesKey = interaction.options.getString("species", true);
+    const petName = interaction.options.getString("name", true).trim();
+    const species = PET_SPECIES[speciesKey];
+    const result = await inTransaction(async (client) => {
+      const player = await client.query("SELECT 1 FROM endless_players WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, interaction.user.id]);
+      if (!player.rows[0]) return { ok: false, reason: "not_registered" };
+      const inserted = await client.query("INSERT INTO endless_pets (world_id, user_id, species, pet_name) VALUES ($1, $2, $3, $4) ON CONFLICT (world_id, user_id) DO NOTHING RETURNING pet_name", [worldId, interaction.user.id, speciesKey, petName]);
+      return inserted.rows[0] ? { ok: true } : { ok: false, reason: "already_has_pet" };
+    });
+    if (!result.ok) return interaction.editReply(result.reason === "not_registered" ? "Önce `/start` ile karakter oluştur." : "Zaten bir yoldaşın var. Önce `/pet show` ile onu ziyaret et.");
+    return interaction.editReply(`${species.emoji} **${petName}** artık senin Endless yoldaşın! Sadakati **1/100**. Onu büyütmek için her gün /pet feed kullanabilirsin.`);
+  }
+
+  const result = await inTransaction(async (client) => {
+    const petResult = await client.query("SELECT pet_name, loyalty FROM endless_pets WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, interaction.user.id]);
+    if (!petResult.rows[0]) return { ok: false, reason: "no_pet" };
+    const walletResult = await client.query("SELECT wallet_coins FROM endless_wallets WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, interaction.user.id]);
+    if (!walletResult.rows[0] || Number(walletResult.rows[0].wallet_coins) < 25) return { ok: false, reason: "insufficient_funds" };
+    await insertLedger(client, { worldId, userId: interaction.user.id, currency: "coin", walletDelta: -25, reason: "pet_feed", idempotencyKey: `pet-feed:${interaction.id}` });
+    await client.query("UPDATE endless_wallets SET wallet_coins = wallet_coins - 25, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, interaction.user.id]);
+    const nextLoyalty = Math.min(100, Number(petResult.rows[0].loyalty) + 10);
+    await client.query("UPDATE endless_pets SET loyalty = $3, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, interaction.user.id, nextLoyalty]);
+    return { ok: true, petName: petResult.rows[0].pet_name, loyalty: nextLoyalty };
+  });
+  if (!result.ok) return interaction.editReply(result.reason === "no_pet" ? "Önce `/pet adopt` ile bir yoldaş sahiplen." : "Yoldaşını beslemek için en az **25 Coin** gerekiyor.");
+  return interaction.editReply(`🍖 **${result.petName}** mutlu mutlu yemeğini yedi! Sadakat: **${result.loyalty}/100**. ${result.loyalty >= 100 ? "Yoldaşın maksimum sadakate ulaştı!" : "Yarın tekrar besleyebilirsin."}`);
+}
+
 const helpText = [
   "**ENDLESS — Komut Rehberi**",
   "`/start` — Bu sunucunun dünyasında karakter oluştur.",
@@ -2092,6 +2155,7 @@ const helpText = [
   "`/games daily-spin` — Veritabanına kaydedilen günlük ücretsiz Şans Çarkı ödülünü al.",
   "`/social hug` / `/social kiss` / `/social cuddle` / `/social pat` / `/social highfive` / `/social boop` — Özgün Endless animasyonları gönder.",
   "`/achievements show` / `/achievements claim` — Rozetlerini gör ve tek seferlik başarı ödüllerini al.",
+  "`/pet adopt` / `/pet show` / `/pet feed` — Özgün bir Endless Yoldaşı sahiplen, isim ver ve sadakatini büyüt.",
   "",
   "Her Discord sunucusu ayrı bir dünyadır. Karakterin ve ekonomin dünyaya özeldir. Günlük ödül ve görevler UTC gece yarısında yenilenir; keşifler arasında 5 dakika bekleme vardır.",
 ].join("\n");
@@ -2714,6 +2778,7 @@ const handlers = {
   games: handleGames,
   social: handleSocial,
   achievements: handleAchievements,
+  pet: handlePet,
   help: async (interaction) => sendPrivate(interaction, helpText),
 };
 
