@@ -1,6 +1,6 @@
 # Third-party attribution
 
-ENDLESS’in `/endless` komut ailesi, [Discord-OwO-Bot](https://github.com/lak65746-source/Discord-OwO-Bot) deposunda görülen hayvan avı, koleksiyon, sosyal etkileşim ve risk/ödül fikirlerinden esinlenerek **sıfırdan, ENDLESS’in Discord.js + PostgreSQL mimarisine göre yeniden uygulanmıştır**.
+ENDLESS’in `/endless` komut ailesi, [kaynak Discord botu](https://github.com/lak65746-source/Discord-OwO-Bot) deposunda görülen hayvan avı, koleksiyon, sosyal etkileşim ve risk/ödül fikirlerinden esinlenerek **sıfırdan, ENDLESS’in Discord.js + PostgreSQL mimarisine göre yeniden uygulanmıştır**.
 
 Kaynak proje yazarı: **Christopher Thai** ve ilgili katkıcılar.
 

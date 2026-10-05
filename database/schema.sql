@@ -143,9 +143,20 @@ CREATE INDEX IF NOT EXISTS endless_players_world_level_idx ON endless_players (w
 CREATE INDEX IF NOT EXISTS endless_ledger_player_idx ON endless_ledger (world_id, user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS endless_quest_date_idx ON endless_daily_quest_progress (world_id, user_id, quest_date);
 
--- ENDLESS OwO-inspired collection and social systems.
+-- One-time compatibility migration from the previous internal table names.
+DO $$
+BEGIN
+  IF to_regclass('public.endless_owo_state') IS NOT NULL AND to_regclass('public.endless_collection_state') IS NULL THEN
+    ALTER TABLE endless_owo_state RENAME TO endless_collection_state;
+  END IF;
+  IF to_regclass('public.endless_owo_animals') IS NOT NULL AND to_regclass('public.endless_collection_animals') IS NULL THEN
+    ALTER TABLE endless_owo_animals RENAME TO endless_collection_animals;
+  END IF;
+END $$;
+
+-- ENDLESS collection and social systems.
 -- These tables contain original ENDLESS implementations, not copied source code.
-CREATE TABLE IF NOT EXISTS endless_owo_state (
+CREATE TABLE IF NOT EXISTS endless_collection_state (
   world_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   hunt_until TIMESTAMPTZ,
@@ -156,7 +167,7 @@ CREATE TABLE IF NOT EXISTS endless_owo_state (
   FOREIGN KEY (world_id, user_id) REFERENCES endless_players(world_id, user_id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS endless_owo_animals (
+CREATE TABLE IF NOT EXISTS endless_collection_animals (
   world_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   animal_key TEXT NOT NULL,
@@ -168,4 +179,4 @@ CREATE TABLE IF NOT EXISTS endless_owo_animals (
   FOREIGN KEY (world_id, user_id) REFERENCES endless_players(world_id, user_id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS endless_owo_animals_rarity_idx ON endless_owo_animals (world_id, user_id, rarity);
+CREATE INDEX IF NOT EXISTS endless_collection_animals_rarity_idx ON endless_collection_animals (world_id, user_id, rarity);

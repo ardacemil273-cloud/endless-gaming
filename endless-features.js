@@ -39,6 +39,15 @@ function displayUser(user) {
   return user?.globalName ?? user?.username ?? "Gizemli oyuncu";
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function playAnimation(interaction, frames) {
+  for (const frame of frames) {
+    await interaction.editReply({ content: frame, allowedMentions: { parse: [] } });
+    await sleep(220);
+  }
+}
+
 function randomBetween([min, max]) {
   return randomInt(min, max + 1);
 }
@@ -76,7 +85,7 @@ export function createEndlessHandler({ pool, inTransaction, insertLedger, applyX
       const now = new Date();
       const cooldownUntil = new Date(now.getTime() + COOLDOWN_MS);
       const stateResult = await client.query(
-        "SELECT hunt_until FROM endless_owo_state WHERE world_id = $1 AND user_id = $2 FOR UPDATE",
+        "SELECT hunt_until FROM endless_collection_state WHERE world_id = $1 AND user_id = $2 FOR UPDATE",
         [worldId, userId],
       );
       const previous = stateResult.rows[0]?.hunt_until;
@@ -87,21 +96,21 @@ export function createEndlessHandler({ pool, inTransaction, insertLedger, applyX
       const coins = Math.min(randomBetween(reward.coins), MAX_BALANCE - Number(wallet.wallet_coins));
       const xp = reward.xp;
       if (coins > 0) {
-        await insertLedger(client, { worldId, userId, currency: "coin", walletDelta: coins, reason: "owo_hunt", idempotencyKey: `owo:hunt:${worldId}:${userId}:${now.toISOString()}` });
+        await insertLedger(client, { worldId, userId, currency: "coin", walletDelta: coins, reason: "endless_hunt", idempotencyKey: `endless:hunt:${worldId}:${userId}:${now.toISOString()}` });
       }
       const xpResult = applyXp(Number(player.level), Number(player.xp), xp);
       await client.query("UPDATE endless_players SET level = $3, xp = $4, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, userId, xpResult.level, xpResult.xp]);
       await client.query("UPDATE endless_wallets SET wallet_coins = wallet_coins + $3, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, userId, coins]);
       await client.query(
-        `INSERT INTO endless_owo_state (world_id, user_id, hunt_until, pray_until, gamble_until)
+        `INSERT INTO endless_collection_state (world_id, user_id, hunt_until, pray_until, gamble_until)
          VALUES ($1, $2, $3, NULL, NULL)
          ON CONFLICT (world_id, user_id) DO UPDATE SET hunt_until = EXCLUDED.hunt_until, updated_at = NOW()`,
         [worldId, userId, cooldownUntil],
       );
       await client.query(
-        `INSERT INTO endless_owo_animals (world_id, user_id, animal_key, rarity, quantity)
+        `INSERT INTO endless_collection_animals (world_id, user_id, animal_key, rarity, quantity)
          VALUES ($1, $2, $3, $4, 1)
-         ON CONFLICT (world_id, user_id, animal_key) DO UPDATE SET quantity = endless_owo_animals.quantity + 1, updated_at = NOW()`,
+         ON CONFLICT (world_id, user_id, animal_key) DO UPDATE SET quantity = endless_collection_animals.quantity + 1, updated_at = NOW()`,
         [worldId, userId, animal.name.toLowerCase().replaceAll(" ", "_"), animal.rarity],
       );
       return { ok: true, animal, reward, coins, xp, level: xpResult.level, levelsGained: xpResult.levelsGained, cooldownUntil };
@@ -113,16 +122,16 @@ export function createEndlessHandler({ pool, inTransaction, insertLedger, applyX
       const walletResult = await client.query("SELECT wallet_coins, wallet_gems FROM endless_wallets WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, userId]);
       if (!walletResult.rows[0]) return { ok: false, reason: "not_registered" };
       const now = new Date();
-      const stateResult = await client.query("SELECT pray_until FROM endless_owo_state WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, userId]);
+      const stateResult = await client.query("SELECT pray_until FROM endless_collection_state WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, userId]);
       const previous = stateResult.rows[0]?.pray_until;
       if (previous && new Date(previous).getTime() > now.getTime()) return { ok: false, reason: "cooldown", cooldownUntil: previous };
       const coins = randomInt(35, 151);
       const gems = randomInt(1, 101) <= 12 ? 1 : 0;
-      if (coins > 0) await insertLedger(client, { worldId, userId, currency: "coin", walletDelta: coins, reason: "owo_pray", idempotencyKey: `owo:pray:${worldId}:${userId}:${now.toISOString()}` });
-      if (gems > 0) await insertLedger(client, { worldId, userId, currency: "gem", walletDelta: gems, reason: "owo_pray", idempotencyKey: `owo:pray:${worldId}:${userId}:${now.toISOString()}:gem` });
+      if (coins > 0) await insertLedger(client, { worldId, userId, currency: "coin", walletDelta: coins, reason: "endless_pray", idempotencyKey: `endless:pray:${worldId}:${userId}:${now.toISOString()}` });
+      if (gems > 0) await insertLedger(client, { worldId, userId, currency: "gem", walletDelta: gems, reason: "endless_pray", idempotencyKey: `endless:pray:${worldId}:${userId}:${now.toISOString()}:gem` });
       await client.query("UPDATE endless_wallets SET wallet_coins = LEAST(wallet_coins + $3, $4), wallet_gems = LEAST(wallet_gems + $5, $4), updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, userId, coins, MAX_BALANCE, gems]);
       const cooldownUntil = new Date(now.getTime() + COOLDOWN_MS);
-      await client.query(`INSERT INTO endless_owo_state (world_id, user_id, hunt_until, pray_until, gamble_until) VALUES ($1, $2, NULL, $3, NULL) ON CONFLICT (world_id, user_id) DO UPDATE SET pray_until = EXCLUDED.pray_until, updated_at = NOW()`, [worldId, userId, cooldownUntil]);
+      await client.query(`INSERT INTO endless_collection_state (world_id, user_id, hunt_until, pray_until, gamble_until) VALUES ($1, $2, NULL, $3, NULL) ON CONFLICT (world_id, user_id) DO UPDATE SET pray_until = EXCLUDED.pray_until, updated_at = NOW()`, [worldId, userId, cooldownUntil]);
       return { ok: true, coins, gems, cooldownUntil };
     });
   }
@@ -135,8 +144,8 @@ export function createEndlessHandler({ pool, inTransaction, insertLedger, applyX
       if (result.rows.length !== 2) return { ok: false, reason: "not_registered" };
       const source = result.rows.find((row) => row.user_id === userId);
       if (Number(source.wallet_coins) < amount) return { ok: false, reason: "insufficient_funds" };
-      await insertLedger(client, { worldId, userId, currency: "coin", walletDelta: -amount, reason: "owo_give", idempotencyKey: `owo:give:${interactionId}:from` });
-      await insertLedger(client, { worldId, userId: targetId, currency: "coin", walletDelta: amount, reason: "owo_give", idempotencyKey: `owo:give:${interactionId}:to` });
+      await insertLedger(client, { worldId, userId, currency: "coin", walletDelta: -amount, reason: "endless_give", idempotencyKey: `endless:give:${interactionId}:from` });
+      await insertLedger(client, { worldId, userId: targetId, currency: "coin", walletDelta: amount, reason: "endless_give", idempotencyKey: `endless:give:${interactionId}:to` });
       await client.query("UPDATE endless_wallets SET wallet_coins = wallet_coins - $3, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, userId, amount]);
       await client.query("UPDATE endless_wallets SET wallet_coins = LEAST(wallet_coins + $3, $4), updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, targetId, amount, MAX_BALANCE]);
       return { ok: true };
@@ -153,7 +162,7 @@ export function createEndlessHandler({ pool, inTransaction, insertLedger, applyX
       const won = jackpot || randomInt(1, 101) <= 46;
       const payout = won ? amount * (jackpot ? 5 : 2) : 0;
       const delta = payout - amount;
-      await insertLedger(client, { worldId, userId, currency: "coin", walletDelta: delta, reason: jackpot ? "owo_gamble_jackpot" : won ? "owo_gamble_win" : "owo_gamble_loss", idempotencyKey: `owo:gamble:${interactionId}` });
+      await insertLedger(client, { worldId, userId, currency: "coin", walletDelta: delta, reason: jackpot ? "endless_gamble_jackpot" : won ? "endless_gamble_win" : "endless_gamble_loss", idempotencyKey: `endless:gamble:${interactionId}` });
       await client.query("UPDATE endless_wallets SET wallet_coins = wallet_coins + $3, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, userId, delta]);
       return { ok: true, won, jackpot, payout, delta };
     });
@@ -167,22 +176,29 @@ export function createEndlessHandler({ pool, inTransaction, insertLedger, applyX
     if (["cookie", "curse", "battle"].includes(action)) {
       const target = interaction.options.getUser("user", true);
       const targetName = displayUser(target);
+      await playAnimation(interaction, action === "battle"
+        ? ["⚔️ Arena kapıları açılıyor...", `⚔️ **${targetName}** düelloya davet edildi...`, "⚔️ Zarlar atılıyor..."]
+        : action === "cookie"
+          ? ["🍪 Fırın ısınıyor...", `🍪 **${targetName}** için hamur hazırlanıyor...`, "🍪 Üzerine çikolata parçaları ekleniyor..."]
+          : ["🌀 Lanet kitabı açılıyor...", `🌀 **${targetName}** için hedef seçiliyor...`, "🌀 Minik kaos hazırlanıyor..."]);
       const message = action === "cookie" ? `🍪 **${targetName}** oyuncusuna sıcacık bir kurabiye gönderildi!` : action === "curse" ? `🌀 **${targetName}** oyuncusuna tamamen eğlencelik bir şans laneti gönderildi. Etkisi 3 saniye sürer!` : `⚔️ **${displayUser(interaction.user)}**, **${targetName}** ile dostça savaşa girdi ve ${FRIENDLY_BATTLES[randomInt(0, FRIENDLY_BATTLES.length)]}. Sonuç: herkes kazandı!`;
       return interaction.editReply({ content: message, allowedMentions: { parse: [] } });
     }
     if (action === "zoo") {
-      const result = await pool.query("SELECT animal_key, rarity, quantity FROM endless_owo_animals WHERE world_id = $1 AND user_id = $2 ORDER BY quantity DESC, rarity ASC LIMIT 20", [worldId, interaction.user.id]);
+      const result = await pool.query("SELECT animal_key, rarity, quantity FROM endless_collection_animals WHERE world_id = $1 AND user_id = $2 ORDER BY quantity DESC, rarity ASC LIMIT 20", [worldId, interaction.user.id]);
       if (!result.rows.length) return interaction.editReply("Hayvan koleksiyonun boş. `/endless hunt` ile ilk hayvanını bul!");
       const lines = result.rows.map((row) => `• **${row.animal_key.replaceAll("_", " ")}** — ${HUNT_REWARDS[row.rarity]?.emoji ?? "🐾"} ${HUNT_REWARDS[row.rarity]?.label ?? row.rarity} ×${row.quantity}`);
       return interaction.editReply(["**ENDLESS Hayvan Koleksiyonu**", ...lines, `Toplam farklı tür: **${result.rows.length}**`].join("\n"));
     }
     if (action === "hunt") {
+      await playAnimation(interaction, ["🌲 ENDLESS ormanına giriliyor...", "🔎 İzler aranıyor...", "🏹 Yay geriliyor..."]);
       const result = await hunt(worldId, interaction.user.id);
       if (!result.ok) return interaction.editReply(result.reason === "cooldown" ? `Av cooldown'ı devam ediyor. <t:${Math.ceil(new Date(result.cooldownUntil).getTime() / 1000)}:R> sonra tekrar dene.` : "Önce `/start` ile bu dünyada karakter oluştur.");
       const levelText = result.levelsGained ? ` Level atladın: **${result.level}**!` : "";
       return interaction.editReply(`${result.reward.emoji} **${result.reward.label} ${result.animal.name}** buldun! **${result.coins} Coin** ve **${result.xp} XP** kazandın.${levelText} Yeni av <t:${Math.ceil(result.cooldownUntil.getTime() / 1000)}:R> hazır.`);
     }
     if (action === "pray") {
+      await playAnimation(interaction, ["🕯️ Tapınak kapıları açılıyor...", "🙏 Dua gökyüzüne yükseliyor...", "✨ Şans kristali parlıyor..."]);
       const result = await pray(worldId, interaction.user.id);
       if (!result.ok) return interaction.editReply(result.reason === "cooldown" ? `Tapınak seni duydu. Yeni dua için <t:${Math.ceil(new Date(result.cooldownUntil).getTime() / 1000)}:R> bekle.` : "Önce `/start` ile bu dünyada karakter oluştur.");
       return interaction.editReply(`🙏 Dua kabul edildi! **${result.coins} Coin**${result.gems ? ` ve **${result.gems} Gem**` : ""} kazandın.`);
@@ -190,11 +206,13 @@ export function createEndlessHandler({ pool, inTransaction, insertLedger, applyX
     if (action === "give") {
       const target = interaction.options.getUser("user", true);
       const amount = interaction.options.getInteger("amount", true);
+      await playAnimation(interaction, ["💸 Transfer hazırlanıyor...", `💸 **${amount.toLocaleString("tr-TR")} Coin** sayılıyor...`, "💸 Güvenli ledger kaydı oluşturuluyor..."]);
       const result = await give(worldId, interaction.user.id, target.id, amount, interaction.id);
       const message = result.reason === "self" ? "Kendine Coin gönderemezsin." : result.reason === "insufficient_funds" ? "Cüzdanında bu transfer için yeterli Coin yok." : result.reason === "not_registered" ? "İki oyuncunun da bu dünyada `/start` ile karakter oluşturması gerekiyor." : `💸 **${target.username}** oyuncusuna **${amount.toLocaleString("tr-TR")} Coin** gönderildi.`;
       return interaction.editReply(message);
     }
     const amount = interaction.options.getInteger("amount", true);
+    await playAnimation(interaction, ["🎰 Makine hazırlanıyor...", "🎰 Makaralar dönüyor...", "🎰 Son sembol bekleniyor..."]);
     const result = await gamble(worldId, interaction.user.id, amount, interaction.id);
     if (!result.ok) return interaction.editReply(result.reason === "insufficient_funds" ? "Bu bahis için cüzdanında yeterli Coin yok." : "Önce `/start` ile bu dünyada karakter oluştur.");
     if (result.jackpot) return interaction.editReply(`🎰 **JACKPOT!** **${result.payout.toLocaleString("tr-TR")} Coin** kazandın!`);
