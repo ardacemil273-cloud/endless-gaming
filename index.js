@@ -11,6 +11,7 @@ import {
   Routes,
   SlashCommandBuilder,
 } from "discord.js";
+import { funCommand, handleFun } from "./fun.js";
 
 const { Pool } = pg;
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
@@ -420,6 +421,7 @@ const commandData = [
   new SlashCommandBuilder()
     .setName("help")
     .setDescription("ENDLESS komut rehberini göster."),
+  funCommand,
 ];
 
 const commandNames = new Set(commandData.map((command) => command.name));
@@ -1945,6 +1947,9 @@ const helpText = [
   "`/inventory bag` — Çantandaki ve kuşanılmış eşyaları gör.",
   "`/inventory equip` / `/inventory unequip` — Ekipman bonuslarını yönet.",
   "`/inventory use` — Tüketilebilir eşyaları kullan.",
+  "`/fun coinflip` / `/fun dice` — Yazı-tura ve özelleştirilebilir zar at.",
+  "`/fun 8ball` / `/fun choose` — Kehanet ve karar yardımcısını kullan.",
+  "`/fun rps` / `/fun trivia` — Taş-kağıt-makas veya mini trivia oyna.",
   "",
   "Her Discord sunucusu ayrı bir dünyadır. Karakterin ve ekonomin dünyaya özeldir. Günlük ödül ve görevler UTC gece yarısında yenilenir; keşifler arasında 5 dakika bekleme vardır.",
 ].join("\n");
@@ -2562,6 +2567,7 @@ const handlers = {
   quest: handleQuest,
   shop: handleShop,
   inventory: handleInventory,
+  fun: handleFun,
   help: async (interaction) => sendPrivate(interaction, helpText),
 };
 
