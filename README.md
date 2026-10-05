@@ -10,7 +10,7 @@ Discord sunucularını ayrı oyun dünyalarına dönüştüren, PostgreSQL deste
 - 5 dakikalık keşif cooldown'ı, rastlantısal olaylar ve XP/level sistemi
 - Üç aşamalı Kül Harabeleri zindanı ve boss savaşı
 - Market, envanter, ekipman bonusları ve tüketilebilir eşyalar
-- **Eğlence merkezi:** `/fun coinflip`, `/fun dice`, `/fun 8ball`, `/fun rps`, `/fun choose`, `/fun trivia`
+- **Eğlence merkezi:** 12 alt komutla şans oyunları, trivia, şaka, söz, vibe, iltifat, dostça roast ve takım uyumu
 - Express health endpoint: `/api/healthz`
 - Discord etkileşimlerinde idempotency ve güvenli mention ayarları
 

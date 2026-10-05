@@ -154,26 +154,26 @@ const shopItemChoices = catalogEntries.map(([key, item]) => ({
 const commandData = [
   new SlashCommandBuilder()
     .setName("start")
-    .setDescription("Bu Discord sunucusunun dünyasında karakter oluştur."),
+    .setDescription("Bu sunucuda kendi ENDLESS karakterini oluştur ve macerana başla."),
   new SlashCommandBuilder()
     .setName("world")
-    .setDescription("Bu Discord sunucusunun oyun dünyasını görüntüle.")
+    .setDescription("Sunucunun ENDLESS dünyasını, oyuncu sayısını ve canlı durumunu gör.")
     .addSubcommand((subcommand) =>
       subcommand
         .setName("status")
-        .setDescription("Dünya adını ve maceracı sayısını göster."),
+        .setDescription("Dünya adını ve toplam maceracı sayısını görüntüle."),
     ),
   new SlashCommandBuilder()
     .setName("player")
-    .setDescription("Karakterini ve dünya sıralamasını görüntüle.")
+    .setDescription("Karakter profilini, seviyeni ve dünya sıralamasını incele.")
     .addSubcommandGroup((group) =>
       group
         .setName("profile")
-        .setDescription("Karakter profili.")
+        .setDescription("Senin veya seçtiğin oyuncunun karakter profilini görüntüle.")
         .addSubcommand((subcommand) =>
           subcommand
             .setName("show")
-            .setDescription("Bir karakterin profilini göster.")
+            .setDescription("Bir oyuncunun seviye, XP ve varlıklarını göster.")
             .addUserOption((option) =>
               option
                 .setName("user")
@@ -185,11 +185,11 @@ const commandData = [
     .addSubcommandGroup((group) =>
       group
         .setName("ranking")
-        .setDescription("Dünya sıralamaları.")
+        .setDescription("Level, Coin veya Gem alanında en iyi oyuncuları gör.")
         .addSubcommand((subcommand) =>
           subcommand
             .setName("leaderboard")
-            .setDescription("Dünyanın en iyi oyuncularını sırala.")
+            .setDescription("Dünyanın en iyi 10 oyuncusunu seçtiğin ölçüte göre sırala.")
             .addStringOption((option) =>
               option
                 .setName("metric")
@@ -209,17 +209,17 @@ const commandData = [
     .addSubcommandGroup((group) =>
       group
         .setName("wallet")
-        .setDescription("Cüzdan bakiyeleri.")
+        .setDescription("Cüzdanındaki harcanabilir Coin ve Gem miktarını gör.")
         .addSubcommand((subcommand) =>
           subcommand
             .setName("balance")
-            .setDescription("Cüzdanındaki Coin ve Gem miktarını göster."),
+            .setDescription("Anlık Coin ve Gem cüzdan bakiyeni hızlıca görüntüle."),
         ),
     )
     .addSubcommandGroup((group) =>
       group
         .setName("bank")
-        .setDescription("Dünya bankası işlemleri.")
+        .setDescription("Birikimlerini güvenle yönet ve banka işlemlerini yap.")
         .addSubcommand((subcommand) =>
           subcommand
             .setName("balance")
@@ -228,7 +228,7 @@ const commandData = [
         .addSubcommand((subcommand) =>
           subcommand
             .setName("deposit")
-            .setDescription("Cüzdandan bankaya para yatır.")
+            .setDescription("Coin veya Gem biriktirmek için bankaya para yatır.")
             .addStringOption((option) =>
               option
                 .setName("currency")
@@ -250,7 +250,7 @@ const commandData = [
         .addSubcommand((subcommand) =>
           subcommand
             .setName("withdraw")
-            .setDescription("Bankadan cüzdana para çek.")
+            .setDescription("Harcamak için bankadaki Coin veya Gem paranı çek.")
             .addStringOption((option) =>
               option
                 .setName("currency")
@@ -272,60 +272,60 @@ const commandData = [
     ),
   new SlashCommandBuilder()
     .setName("adventure")
-    .setDescription("Günlük ödülünü al ve dünyayı keşfet.")
+    .setDescription("Günlük ödülünü al, keşfe çık ve macera XP’si kazan.")
     .addSubcommandGroup((group) =>
       group
         .setName("daily")
-        .setDescription("Günlük ödül.")
+        .setDescription("Seri bonusunu koruyarak günlük ödülünü al.")
         .addSubcommand((subcommand) =>
           subcommand
             .setName("claim")
-            .setDescription("Günlük Coin ödülünü ve seri bonusunu al."),
+            .setDescription("Günlük Coin, Gem ve seri bonusunu kaçırmadan al."),
         ),
     )
     .addSubcommandGroup((group) =>
       group
         .setName("journey")
-        .setDescription("Keşif yolculuğu.")
+        .setDescription("Cooldown sonunda yeniden keşfe çık ve rastgele olayları keşfet.")
         .addSubcommand((subcommand) =>
           subcommand
             .setName("explore")
-            .setDescription("XP ve ganimet için keşfe çık."),
+            .setDescription("XP, Coin, Gem ve sürpriz olaylar için keşfe çık."),
         ),
     ),
   new SlashCommandBuilder()
     .setName("dungeon")
-    .setDescription("Kül Harabeleri'nde dalgalar ve boss ile savaş.")
+    .setDescription("Kül Harabeleri’nde üç dalgayı aş, boss’u yen ve büyük ödülü kap.")
     .addSubcommand((subcommand) =>
       subcommand
         .setName("enter")
-        .setDescription("50 Coin karşılığında Kül Harabeleri'ne gir."),
+        .setDescription("50 Coin ödeyerek üç aşamalı Kül Harabeleri koşusunu başlat."),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("status")
-        .setDescription("Aktif zindan savaşının durumunu gör."),
+        .setDescription("Mevcut dalga, HP, düşman ve cooldown durumunu kontrol et."),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("fight")
-        .setDescription("Mevcut düşmana saldır ve karşılık ver."),
+        .setDescription("Düşmana saldır, hasar ver ve karşı saldırıya hazırlan."),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("retreat")
-        .setDescription("Savaştan çekil; zindan bekleme süresi başlar."),
+        .setDescription("Koşuyu bırak; giriş bedeli iade edilmez ve cooldown başlar."),
     ),
   new SlashCommandBuilder()
     .setName("quest")
-    .setDescription("Günlük görevlerini görüntüle ve ödüllerini al.")
+    .setDescription("Günlük hedeflerini tamamla, ilerlemeni gör ve ödülleri topla.")
     .addSubcommand((subcommand) =>
-      subcommand.setName("board").setDescription("Günlük görev panosunu göster."),
+      subcommand.setName("board").setDescription("Bugünün görevlerini, ilerlemelerini ve ödüllerini listele."),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("claim")
-        .setDescription("Tamamladığın günlük görevin ödülünü al.")
+        .setDescription("Tamamladığın günlük görevin ödülünü güvenle teslim al.")
         .addStringOption((option) =>
           option
             .setName("quest")
@@ -341,16 +341,16 @@ const commandData = [
     ),
   new SlashCommandBuilder()
     .setName("shop")
-    .setDescription("ENDLESS eşyalarını incele ve satın al.")
+    .setDescription("Güçlü ekipmanları ve tüketilebilir eşyaları incele, satın al.")
     .addSubcommand((subcommand) =>
       subcommand
         .setName("browse")
-        .setDescription("Eşya kataloğunu ve fiyatları görüntüle."),
+        .setDescription("Tüm ekipmanları, etkilerini ve güncel fiyatlarını gör."),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("buy")
-        .setDescription("Cüzdanındaki Coin veya Gem ile eşya satın al.")
+        .setDescription("Cüzdanındaki para ile seçtiğin eşyadan satın al.")
         .addStringOption((option) =>
           option
             .setName("item")
@@ -369,16 +369,16 @@ const commandData = [
     ),
   new SlashCommandBuilder()
     .setName("inventory")
-    .setDescription("Çantanı ve ekipmanını yönet.")
+    .setDescription("Envanterini düzenle, ekipman kuşan ve eşyalarını kullan.")
     .addSubcommand((subcommand) =>
       subcommand
         .setName("bag")
-        .setDescription("Çantandaki ve kuşanılmış eşyaları göster."),
+        .setDescription("Çantandaki eşyaları ve aktif ekipman bonuslarını gör."),
     )
     .addSubcommand((subcommand) =>
       subcommand
         .setName("equip")
-        .setDescription("Sahip olduğun ekipmanı kuşan.")
+        .setDescription("Sahip olduğun ekipmanı doğru slota kuşan ve bonus kazan.")
         .addStringOption((option) =>
           option
             .setName("item")
@@ -390,7 +390,7 @@ const commandData = [
     .addSubcommand((subcommand) =>
       subcommand
         .setName("unequip")
-        .setDescription("Bir ekipman yuvasını boşalt.")
+        .setDescription("Seçtiğin ekipman slotunu boşalt ve bonusu kaldır.")
         .addStringOption((option) =>
           option
             .setName("slot")
@@ -402,7 +402,7 @@ const commandData = [
     .addSubcommand((subcommand) =>
       subcommand
         .setName("use")
-        .setDescription("Tüketilebilir eşyayı kullan.")
+        .setDescription("Tüketilebilir eşyanı kullanarak anında XP kazan.")
         .addStringOption((option) =>
           option
             .setName("item")
@@ -421,7 +421,7 @@ const commandData = [
     ),
   new SlashCommandBuilder()
     .setName("help")
-    .setDescription("ENDLESS komut rehberini göster."),
+    .setDescription("Tüm ENDLESS oyun, ekonomi, macera ve eğlence komutlarını keşfet."),
   funCommand,
 ];
 
@@ -1963,9 +1963,12 @@ const helpText = [
   "`/inventory bag` — Çantandaki ve kuşanılmış eşyaları gör.",
   "`/inventory equip` / `/inventory unequip` — Ekipman bonuslarını yönet.",
   "`/inventory use` — Tüketilebilir eşyaları kullan.",
-  "`/fun coinflip` / `/fun dice` — Yazı-tura ve özelleştirilebilir zar at.",
-  "`/fun 8ball` / `/fun choose` — Kehanet ve karar yardımcısını kullan.",
-  "`/fun rps` / `/fun trivia` — Taş-kağıt-makas veya mini trivia oyna.",
+  "`/fun coinflip` / `/fun dice` — Yazı-tura veya özelleştirilebilir zar at.",
+  "`/fun 8ball` / `/fun choose` — Kehanet al veya iki seçenekten birini seç.",
+  "`/fun rps` / `/fun trivia` — Taş-kağıt-makas ve mini trivia oyna.",
+  "`/fun joke` / `/fun quote` / `/fun vibe` — Şaka, söz veya günlük enerji keşfet.",
+  "`/fun compliment` / `/fun roast` — Dostça iltifat et veya kırıcı olmayan şaka yap.",
+  "`/fun ship` — İki oyuncunun eğlenceli takım uyumunu ölç.",
   "",
   "Her Discord sunucusu ayrı bir dünyadır. Karakterin ve ekonomin dünyaya özeldir. Günlük ödül ve görevler UTC gece yarısında yenilenir; keşifler arasında 5 dakika bekleme vardır.",
 ].join("\n");
