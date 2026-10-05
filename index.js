@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { readFileSync } from "node:fs";
 import express from "express";
 import pg from "pg";
 import pino from "pino";
@@ -427,7 +428,22 @@ const commandData = [
 const commandNames = new Set(commandData.map((command) => command.name));
 
 function loggerError(error, context) {
-  logger.error({ err: error, ...context });
+  logger.error(
+    {
+      err: error,
+      errorCode: error?.code,
+      databaseConstraint: error?.constraint,
+      ...context,
+    },
+    error?.message ?? "Unhandled ENDLESS error",
+  );
+}
+
+async function ensureDatabaseSchema() {
+  const schemaUrl = new URL("./database/schema.sql", import.meta.url);
+  const schema = readFileSync(schemaUrl, "utf8");
+  await pool.query(schema);
+  logger.info("PostgreSQL şeması doğrulandı.");
 }
 
 function utcDateString(date = new Date()) {
@@ -2583,10 +2599,11 @@ async function handleInteraction(interaction) {
       userId: interaction.user.id,
       guildId: interaction.guildId,
     });
-    await sendPrivate(
-      interaction,
-      "Komut tamamlanamadı. Lütfen biraz sonra yeniden dene.",
-    ).catch((replyError) => {
+    const databaseUnavailable = ["42P01", "3F000", "57P01", "08001", "08006"].includes(error?.code);
+    const message = databaseUnavailable
+      ? "ENDLESS veritabanına erişemedi. Yönetici bağlantı ayarlarını ve PostgreSQL durumunu kontrol etmeli."
+      : "Komut tamamlanamadı. Lütfen biraz sonra yeniden dene.";
+    await sendPrivate(interaction, message).catch((replyError) => {
       loggerError(replyError, {
         commandName: interaction.commandName,
         operation: "send_command_error",
@@ -2630,6 +2647,8 @@ async function start() {
   if (!Number.isInteger(port) || port <= 0) {
     throw new Error(`Invalid PORT value: "${rawPort}"`);
   }
+
+  await ensureDatabaseSchema();
 
   const server = app.listen(port, () => {
     logger.info({ port }, "API server listening");

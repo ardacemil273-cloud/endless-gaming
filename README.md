@@ -20,11 +20,10 @@ Discord sunucularını ayrı oyun dünyalarına dönüştüren, PostgreSQL deste
 npm ci
 cp .env.example .env
 # .env içine Discord token, DATABASE_URL ve PORT değerlerini gir
-psql "$DATABASE_URL" -f database/schema.sql
 npm start
 ```
 
-Discord uygulamasında bot için `Guilds` intent yeterlidir. Komutlar, `DISCORD_DEV_GUILD_ID` verilirse o sunucuya anında; verilmezse global olarak kaydedilir.
+Discord uygulamasında bot için `Guilds` intent yeterlidir. Bot açılışta `database/schema.sql` dosyasını otomatik ve idempotent biçimde uygular; ayrıca elle çalıştırmak istersen `psql "$DATABASE_URL" -f database/schema.sql` kullanabilirsin. Komutlar, `DISCORD_DEV_GUILD_ID` verilirse o sunucuya anında; verilmezse global olarak kaydedilir.
 
 ## Deploy kontrol listesi
 
@@ -41,3 +40,4 @@ Discord uygulamasında bot için `Guilds` intent yeterlidir. Komutlar, `DISCORD_
 - Kullanıcı girdilerinde Discord mention'ları kapalıdır.
 - Eğlence komutlarında spam'e karşı oyuncu başına 2 saniyelik cooldown vardır.
 - `LOG_LEVEL=info` varsayılandır; üretimde gizli değerleri loglama.
+- Veritabanı kaynaklı komut hatalarında loglara PostgreSQL hata kodu ve constraint bilgisi eklenir; kullanıcıya bağlantı sorunu için ayrı, güvenli bir mesaj gösterilir.
