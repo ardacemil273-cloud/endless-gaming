@@ -12,7 +12,9 @@ Discord sunucularını ayrı oyun dünyalarına dönüştüren, PostgreSQL deste
 - Market, envanter, ekipman bonusları ve tüketilebilir eşyalar
 - **Eğlence merkezi:** 12 alt komutla şans oyunları, trivia, şaka, söz, vibe, iltifat, dostça roast ve takım uyumu
 - **`/endless` koleksiyon merkezi:** hayvan avı, kalıcı hayvan koleksiyonu, zoo görünümü, dua ödülü, Coin transferi, kontrollü bahis ve sosyal etkileşimler
-- **Oyun animasyonları:** av, tapınak, transfer, bahis ve sosyal savaşlar Discord mesajını adım adım günceller.
+- **ENDLESS oyun merkezi:** `/games slots`, adım adım oynanan blackjack, hücre seçimli mayın tarlası ve oyun içi Coin bahisleri
+- **Özgün sosyal animasyonlar:** `/social hug`, `/social kiss`, `/social cuddle`, `/social pat`, `/social highfive` ve `/social boop` Discord mesajını adım adım günceller.
+- **Oyun animasyonları:** av, tapınak, transfer, bahis, slot, blackjack, mayın tarlası ve sosyal hareketler Discord mesajını adım adım günceller.
 - Express health endpoint: `/api/healthz`
 - Discord etkileşimlerinde idempotency ve güvenli mention ayarları
 

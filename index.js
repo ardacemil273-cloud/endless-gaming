@@ -14,6 +14,7 @@ import {
 } from "discord.js";
 import { funCommand, handleFun } from "./fun.js";
 import { createEndlessHandler, endlessCommand } from "./endless-features.js";
+import { createGamesHandler, gamesCommand, handleSocial, socialCommand } from "./games.js";
 
 const { Pool } = pg;
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
@@ -425,6 +426,8 @@ const commandData = [
     .setDescription("Tüm ENDLESS oyun, ekonomi, macera ve eğlence komutlarını keşfet."),
   funCommand,
   endlessCommand,
+  gamesCommand,
+  socialCommand,
 ];
 
 const commandNames = new Set(commandData.map((command) => command.name));
@@ -1954,6 +1957,8 @@ const handleEndless = createEndlessHandler({
   MAX_BALANCE,
 });
 
+const handleGames = createGamesHandler({ pool, inTransaction, insertLedger });
+
 const helpText = [
   "**ENDLESS — Komut Rehberi**",
   "`/start` — Bu sunucunun dünyasında karakter oluştur.",
@@ -1983,6 +1988,10 @@ const helpText = [
   "`/endless give` / `/endless gamble` — Coin gönder veya kontrollü oyun içi bahis yap.",
   "`/endless pray` / `/endless battle` — Dua ödülü al veya dostça savaş yap.",
   "`/endless cookie` / `/endless curse` — Oyunculara sosyal ve tamamen eğlencelik etkileşim gönder.",
+  "`/games slots` — ENDLESS slot makinesinde Coin bahis yap.",
+  "`/games blackjack` — Blackjack eli başlat; `blackjack-hit`, `blackjack-stand` veya `blackjack-cancel` ile yönet.",
+  "`/games mines` — 1-9 arasından hücre seç, mayına basmadan ödül kazan.",
+  "`/social hug` / `/social kiss` / `/social cuddle` / `/social pat` / `/social highfive` / `/social boop` — Özgün Endless animasyonları gönder.",
   "",
   "Her Discord sunucusu ayrı bir dünyadır. Karakterin ve ekonomin dünyaya özeldir. Günlük ödül ve görevler UTC gece yarısında yenilenir; keşifler arasında 5 dakika bekleme vardır.",
 ].join("\n");
@@ -2602,6 +2611,8 @@ const handlers = {
   inventory: handleInventory,
   fun: handleFun,
   endless: handleEndless,
+  games: handleGames,
+  social: handleSocial,
   help: async (interaction) => sendPrivate(interaction, helpText),
 };
 
