@@ -11,7 +11,7 @@ Discord sunucularını ayrı oyun dünyalarına dönüştüren, PostgreSQL deste
 - Üç aşamalı Kül Harabeleri zindanı ve boss savaşı
 - Market, envanter, ekipman bonusları ve tüketilebilir eşyalar
 - **Eğlence merkezi:** 12 alt komutla şans oyunları, trivia, şaka, söz, vibe, iltifat, dostça roast ve takım uyumu
-- **`/owo` koleksiyon merkezi:** hayvan avı, kalıcı hayvan koleksiyonu, zoo görünümü, dua ödülü, Coin transferi, kontrollü bahis ve sosyal etkileşimler
+- **`/endless` koleksiyon merkezi:** hayvan avı, kalıcı hayvan koleksiyonu, zoo görünümü, dua ödülü, Coin transferi, kontrollü bahis ve sosyal etkileşimler
 - Express health endpoint: `/api/healthz`
 - Discord etkileşimlerinde idempotency ve güvenli mention ayarları
 
