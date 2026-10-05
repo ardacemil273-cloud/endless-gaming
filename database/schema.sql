@@ -142,3 +142,30 @@ CREATE TABLE IF NOT EXISTS endless_item_uses (
 CREATE INDEX IF NOT EXISTS endless_players_world_level_idx ON endless_players (world_id, level DESC, xp DESC);
 CREATE INDEX IF NOT EXISTS endless_ledger_player_idx ON endless_ledger (world_id, user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS endless_quest_date_idx ON endless_daily_quest_progress (world_id, user_id, quest_date);
+
+-- ENDLESS OwO-inspired collection and social systems.
+-- These tables contain original ENDLESS implementations, not copied source code.
+CREATE TABLE IF NOT EXISTS endless_owo_state (
+  world_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  hunt_until TIMESTAMPTZ,
+  pray_until TIMESTAMPTZ,
+  gamble_until TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (world_id, user_id),
+  FOREIGN KEY (world_id, user_id) REFERENCES endless_players(world_id, user_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS endless_owo_animals (
+  world_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  animal_key TEXT NOT NULL,
+  rarity TEXT NOT NULL CHECK (rarity IN ('common', 'uncommon', 'rare', 'epic', 'legendary')),
+  quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (world_id, user_id, animal_key),
+  FOREIGN KEY (world_id, user_id) REFERENCES endless_players(world_id, user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS endless_owo_animals_rarity_idx ON endless_owo_animals (world_id, user_id, rarity);

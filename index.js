@@ -13,6 +13,7 @@ import {
   SlashCommandBuilder,
 } from "discord.js";
 import { funCommand, handleFun } from "./fun.js";
+import { createOwoHandler, owoCommand } from "./owo.js";
 
 const { Pool } = pg;
 const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
@@ -423,6 +424,7 @@ const commandData = [
     .setName("help")
     .setDescription("Tüm ENDLESS oyun, ekonomi, macera ve eğlence komutlarını keşfet."),
   funCommand,
+  owoCommand,
 ];
 
 const commandNames = new Set(commandData.map((command) => command.name));
@@ -1944,6 +1946,14 @@ async function useConsumable(input) {
   });
 }
 
+const handleOwo = createOwoHandler({
+  pool,
+  inTransaction,
+  insertLedger,
+  applyXp,
+  MAX_BALANCE,
+});
+
 const helpText = [
   "**ENDLESS — Komut Rehberi**",
   "`/start` — Bu sunucunun dünyasında karakter oluştur.",
@@ -1969,6 +1979,10 @@ const helpText = [
   "`/fun joke` / `/fun quote` / `/fun vibe` — Şaka, söz veya günlük enerji keşfet.",
   "`/fun compliment` / `/fun roast` — Dostça iltifat et veya kırıcı olmayan şaka yap.",
   "`/fun ship` — İki oyuncunun eğlenceli takım uyumunu ölç.",
+  "`/owo hunt` / `/owo zoo` — Hayvan avla, koleksiyonunu büyüt ve ödül kazan.",
+  "`/owo give` / `/owo gamble` — Coin gönder veya kontrollü oyun içi bahis yap.",
+  "`/owo pray` / `/owo battle` — Dua ödülü al veya dostça savaş yap.",
+  "`/owo cookie` / `/owo curse` — Oyunculara sosyal ve tamamen eğlencelik etkileşim gönder.",
   "",
   "Her Discord sunucusu ayrı bir dünyadır. Karakterin ve ekonomin dünyaya özeldir. Günlük ödül ve görevler UTC gece yarısında yenilenir; keşifler arasında 5 dakika bekleme vardır.",
 ].join("\n");
@@ -2587,6 +2601,7 @@ const handlers = {
   shop: handleShop,
   inventory: handleInventory,
   fun: handleFun,
+  owo: handleOwo,
   help: async (interaction) => sendPrivate(interaction, helpText),
 };
 
