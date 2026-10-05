@@ -472,8 +472,30 @@ function weightedSlot() {
   return SLOTS[0];
 }
 __name(weightedSlot, "weightedSlot");
-function drawCard() {
-  return { rank: CARD_RANKS[randomInt3(0, CARD_RANKS.length)], suit: CARD_SUITS[randomInt3(0, CARD_SUITS.length)] };
+function cardKey(card) {
+  return `${card.rank}:${card.suit}`;
+}
+__name(cardKey, "cardKey");
+function createBlackjackDeck(excludedCards = []) {
+  const excluded = new Set(excludedCards.map(cardKey));
+  const deck = CARD_RANKS.flatMap((rank) => CARD_SUITS.map((suit) => ({ rank, suit }))).filter((card) => !excluded.has(cardKey(card)));
+  for (let index = deck.length - 1; index > 0; index -= 1) {
+    const other = randomInt3(0, index + 1);
+    [deck[index], deck[other]] = [deck[other], deck[index]];
+  }
+  return deck;
+}
+__name(createBlackjackDeck, "createBlackjackDeck");
+function ensureBlackjackDeck(hand) {
+  if (!Array.isArray(hand.deck) || hand.deck.length === 0) {
+    hand.deck = createBlackjackDeck([...hand.player, ...hand.dealer]);
+  }
+}
+__name(ensureBlackjackDeck, "ensureBlackjackDeck");
+function drawCard(deck) {
+  const card = deck.pop();
+  if (!card) throw new Error("Blackjack shoe is empty.");
+  return card;
 }
 __name(drawCard, "drawCard");
 function cardText(card) {
@@ -490,12 +512,29 @@ function handValue(hand) {
   return value;
 }
 __name(handValue, "handValue");
+function blackjackOutcome(playerHand, dealerHand, bet) {
+  const player = handValue(playerHand);
+  const dealer = handValue(dealerHand);
+  const playerNatural = playerHand.length === 2 && player === 21;
+  const dealerNatural = dealerHand.length === 2 && dealer === 21;
+  if (playerNatural && dealerNatural) return { player, dealer, natural: true, win: false, push: true, payout: bet };
+  if (playerNatural) return { player, dealer, natural: true, win: true, push: false, payout: bet + Math.floor(bet * 1.5) };
+  if (dealerNatural) return { player, dealer, natural: true, win: false, push: false, payout: 0 };
+  const win = player > dealer || dealer > 21;
+  const push = player === dealer;
+  return { player, dealer, natural: false, win, push, payout: win ? bet * 2 : push ? bet : 0 };
+}
+__name(blackjackOutcome, "blackjackOutcome");
 function handText(hand) {
   return hand.map(cardText).join(" ");
 }
 __name(handText, "handText");
 function createBlackjack() {
-  return { player: [drawCard(), drawCard()], dealer: [drawCard(), drawCard()], bet: 0 };
+  const deck = createBlackjackDeck();
+  const hand = { player: [], dealer: [], deck, bet: 0 };
+  hand.player.push(drawCard(deck), drawCard(deck));
+  hand.dealer.push(drawCard(deck), drawCard(deck));
+  return hand;
 }
 __name(createBlackjack, "createBlackjack");
 async function walletBet({ pool: pool2, inTransaction: inTransaction2, insertLedger: insertLedger2, worldId, userId, amount, reason, interactionId }) {
@@ -593,11 +632,28 @@ ${!grossPayout ? `Makaralar sustu. **${amount.toLocaleString("tr-TR")} Coin** gi
       );
       const hand2 = createBlackjack();
       hand2.bet = amount;
+      const opening = blackjackOutcome(hand2.player, hand2.dealer, amount);
+      if (opening.natural) {
+        let credited = 0;
+        if (opening.payout > 0) {
+          const payment = await walletPayoutInTransaction(client, {
+            insertLedger: insertLedger2,
+            worldId: interaction.guildId,
+            userId: interaction.user.id,
+            amount: opening.payout,
+            reason: opening.push ? "blackjack_natural_push" : "blackjack_natural_payout",
+            interactionId: interaction.id
+          });
+          if (!payment.ok) return payment;
+          credited = payment.credited;
+        }
+        return { ok: true, hand: hand2, opening: { ...opening, credited } };
+      }
       await client.query(
         `INSERT INTO endless_blackjack_sessions
-          (world_id, user_id, interaction_id, player_hand, dealer_hand, bet)
-         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6)`,
-        [interaction.guildId, interaction.user.id, interaction.id, JSON.stringify(hand2.player), JSON.stringify(hand2.dealer), amount]
+          (world_id, user_id, interaction_id, player_hand, dealer_hand, deck, bet)
+         VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7)`,
+        [interaction.guildId, interaction.user.id, interaction.id, JSON.stringify(hand2.player), JSON.stringify(hand2.dealer), JSON.stringify(hand2.deck), amount]
       );
       return { ok: true, hand: hand2 };
     });
@@ -608,6 +664,16 @@ ${!grossPayout ? `Makaralar sustu. **${amount.toLocaleString("tr-TR")} Coin** gi
       return interaction.editReply("Bu el i\xE7in yeterli Coin yok.");
     }
     const hand = result.hand;
+    if (result.opening) {
+      await animate(interaction, ["\u{1F0CF} \u0130lk kartlar a\xE7\u0131l\u0131yor...", "\u2728 Do\u011Fal blackjack kontrol ediliyor..."]);
+      const opening = result.opening;
+      const summary = opening.push
+        ? `\u0130ki taraf\u0131n da do\u011Fal blackjack'i var; **${opening.credited.toLocaleString("tr-TR")} Coin** iade edildi.`
+        : opening.win
+          ? `Do\u011Fal blackjack! 3:2 ikramiyeyle toplam **${opening.credited.toLocaleString("tr-TR")} Coin** c\xFCzdan\u0131na eklendi.`
+          : `Krupiyenin do\u011Fal blackjack'i var; **${amount.toLocaleString("tr-TR")} Coin** kaybettin.`;
+      return interaction.editReply(`**Blackjack — Do\u011Fal 21**\nSen: ${handText(hand.player)} (**${handValue(hand.player)}**)\nKrupiye: ${handText(hand.dealer)} (**${handValue(hand.dealer)}**)\n${summary}`);
+    }
     await animate(interaction, ["\u{1F0CF} ENDLESS krupiyesi kartlar\u0131 kar\u0131yor...", "\u{1F0CF} \u0130lk kartlar da\u011F\u0131t\u0131l\u0131yor...", "\u{1F0CF} Hamleni se\xE7: hit veya stand."]);
     return interaction.editReply(`**Blackjack**
 Sen: ${handText(hand.player)} (**${handValue(hand.player)}**)
@@ -639,7 +705,7 @@ Devam etmek i\xE7in hit, stand veya cancel kullan.`);
       );
       if (!wallet.rows[0]) return { ok: false, reason: "no_session" };
       const sessionResult = await client.query(
-        `SELECT interaction_id, player_hand, dealer_hand, bet
+        `SELECT interaction_id, player_hand, dealer_hand, deck, bet
          FROM endless_blackjack_sessions
          WHERE world_id = $1 AND user_id = $2
          FOR UPDATE`,
@@ -658,8 +724,10 @@ Devam etmek i\xE7in hit, stand veya cancel kullan.`);
       const hand = {
         player: session.player_hand,
         dealer: session.dealer_hand,
+        deck: session.deck ?? [],
         bet: Number(session.bet)
       };
+      ensureBlackjackDeck(hand);
       if (action === "cancel") {
         const refund = await walletPayoutInTransaction(client, {
           insertLedger: insertLedger2,
@@ -674,24 +742,21 @@ Devam etmek i\xE7in hit, stand veya cancel kullan.`);
         return { ok: true, kind: "cancel", bet: hand.bet, refunded: refund.credited };
       }
       if (action === "hit") {
-        const card = drawCard();
+        const card = drawCard(hand.deck);
         hand.player.push(card);
         if (handValue(hand.player) > 21) {
           await client.query("DELETE FROM endless_blackjack_sessions WHERE world_id = $1 AND user_id = $2", [interaction.guildId, interaction.user.id]);
           return { ok: true, kind: "bust", hand };
         }
         await client.query(
-          "UPDATE endless_blackjack_sessions SET player_hand = $3::jsonb, updated_at = NOW() WHERE world_id = $1 AND user_id = $2",
-          [interaction.guildId, interaction.user.id, JSON.stringify(hand.player)]
+          "UPDATE endless_blackjack_sessions SET player_hand = $3::jsonb, deck = $4::jsonb, updated_at = NOW() WHERE world_id = $1 AND user_id = $2",
+          [interaction.guildId, interaction.user.id, JSON.stringify(hand.player), JSON.stringify(hand.deck)]
         );
         return { ok: true, kind: "hit", hand, card };
       }
-      while (handValue(hand.dealer) < 17) hand.dealer.push(drawCard());
-      const player = handValue(hand.player);
-      const dealer = handValue(hand.dealer);
-      const win = player > dealer || dealer > 21;
-      const push = player === dealer;
-      const payout = win ? hand.bet * 2 : push ? hand.bet : 0;
+      while (handValue(hand.dealer) < 17) hand.dealer.push(drawCard(hand.deck));
+      const outcome = blackjackOutcome(hand.player, hand.dealer, hand.bet);
+      const { player, dealer, win, push, payout, natural } = outcome;
       let credited = 0;
       if (payout > 0) {
         const paid = await walletPayoutInTransaction(client, {
@@ -699,14 +764,14 @@ Devam etmek i\xE7in hit, stand veya cancel kullan.`);
           worldId: interaction.guildId,
           userId: interaction.user.id,
           amount: payout,
-          reason: push ? "blackjack_push" : "blackjack_payout",
+          reason: natural ? push ? "blackjack_natural_push" : "blackjack_natural_payout" : push ? "blackjack_push" : "blackjack_payout",
           interactionId: interaction.id
         });
         if (!paid.ok) return paid;
         credited = paid.credited;
       }
       await client.query("DELETE FROM endless_blackjack_sessions WHERE world_id = $1 AND user_id = $2", [interaction.guildId, interaction.user.id]);
-      return { ok: true, kind: "stand", hand, player, dealer, win, push, credited };
+      return { ok: true, kind: "stand", hand, player, dealer, win, push, natural, credited };
     });
     if (!result.ok) {
       if (result.reason === "duplicate") return interaction.editReply("Bu hamle zaten i\u015Flendi. G\xFCncel elini `/games blackjack-status` ile kontrol et.");
@@ -3424,8 +3489,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 }
 export {
   addPercentBonus,
+  blackjackOutcome,
   companionAttackBonus,
   companionRewardPercent,
+  createBlackjack,
+  createBlackjackDeck,
   gamesCommand,
   handValue,
   petFeedReadyAt

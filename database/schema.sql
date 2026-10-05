@@ -270,12 +270,16 @@ CREATE TABLE IF NOT EXISTS endless_blackjack_sessions (
   interaction_id TEXT NOT NULL UNIQUE,
   player_hand JSONB NOT NULL CHECK (jsonb_typeof(player_hand) = 'array'),
   dealer_hand JSONB NOT NULL CHECK (jsonb_typeof(dealer_hand) = 'array'),
+  deck JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(deck) = 'array'),
   bet BIGINT NOT NULL CHECK (bet > 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (world_id, user_id),
   FOREIGN KEY (world_id, user_id) REFERENCES endless_wallets(world_id, user_id) ON DELETE CASCADE
 );
+
+ALTER TABLE endless_blackjack_sessions
+  ADD COLUMN IF NOT EXISTS deck JSONB NOT NULL DEFAULT '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS endless_blackjack_actions (
   world_id TEXT NOT NULL,

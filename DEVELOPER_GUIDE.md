@@ -28,7 +28,7 @@ Bu dosya, projeyi ilk kez açan birinin botun nasıl çalıştığını anlayabi
 
 Bu yapı sayesinde bot kapanıp tekrar açılsa bile Coin hareketlerinin geçmişi `endless_ledger` tablosunda kalır.
 
-Blackjack'te bahis düşümü ve el kaydı aynı transaction içinde yapılır. Oyuncu/eldeki durum `endless_blackjack_sessions` tablosunda; `hit`, `stand` ve `cancel` etkileşim kimlikleri `endless_blackjack_actions` tablosunda saklanır. Hamleler wallet satırını önce kilitlediği ve sonra eli güncellediği için eşzamanlı komutlar ikinci kez kart çekemez veya ödeme alamaz. Bot yeniden başlatılırsa `/games blackjack-status` mevcut eli geri gösterir.
+Blackjack'te bahis düşümü ve el kaydı aynı transaction içinde yapılır. Her el kriptografik rastgelelikle karıştırılmış standart 52 kartlık desteden dağıtılır; kalan kartlar `endless_blackjack_sessions.deck` alanında oyuncu eliyle birlikte saklanır. Böylece bir el içinde aynı kart yeniden çıkmaz ve bot yeniden başlatılırsa `/games blackjack-status` mevcut eliyle desteyi geri yükler. Eski aktif elin destesi boşsa açılışta eldeki kartlar çıkarılarak bir kalan deste oluşturulur. İki kartla alınan doğal blackjack 3:2 toplam ödeme alır; krupiyeyle eşleşen doğal blackjack beraberlik sayılır. `hit`, `stand` ve `cancel` etkileşim kimlikleri ayrıca `endless_blackjack_actions` tablosunda tekilleştirilir.
 
 ## 3. Dosyaları nerede değiştirmeliyim?
 

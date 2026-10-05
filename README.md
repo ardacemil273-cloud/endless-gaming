@@ -12,7 +12,7 @@ Discord sunucularını ayrı oyun dünyalarına dönüştüren, PostgreSQL deste
 - Market, envanter, ekipman bonusları ve tüketilebilir eşyalar
 - **Eğlence merkezi:** 12 alt komutla şans oyunları, trivia, şaka, söz, vibe, iltifat, dostça roast ve takım uyumu
 - **`/endless` koleksiyon merkezi:** hayvan avı, kalıcı hayvan koleksiyonu, zoo görünümü, dua ödülü, Coin transferi, kontrollü bahis ve sosyal etkileşimler
-- **ENDLESS oyun merkezi:** `/games slots`, adım adım oynanan blackjack (açık el veritabanında saklanır; `/games blackjack-status` ile geri açılır), hücre seçimli mayın tarlası ve oyun içi Coin bahisleri
+- **ENDLESS oyun merkezi:** `/games slots`, 52 kartlık desteli ve 3:2 doğal blackjack ödüllü oyun (açık el ve kalan deste veritabanında saklanır; `/games blackjack-status` ile geri açılır), hücre seçimli mayın tarlası ve Coin bahisleri
 - **Endless Arcade genişletmesi:** rulet, crash ve veritabanına kaydedilen günlük ücretsiz Şans Çarkı
 - **Başarım Salonu:** `/achievements show` ile kalıcı rozet ilerlemesi, `/achievements claim` ile tek seferlik Coin/Gem/XP ödülleri
 - **Endless Yoldaşlar:** `/pet adopt`, `/pet show` ve 24 saatte bir `/pet feed`; sadakat artık türüne göre keşif/av Coin'i, XP, zindan hasarı veya dua ödülünü güçlendirir
@@ -55,7 +55,7 @@ Detaylı açıklama için [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) dosyasına 
 - `assets/gifs/`: Discord'da gönderilen özgün Endless sosyal animasyonlarıdır.
 - `endless_achievement_claims`: başarımların ödülünün iki kez verilmesini engeller.
 - `endless_pets`: oyuncunun yoldaş türünü, adını ve 1–100 arasındaki sadakat seviyesini saklar.
-- `endless_blackjack_sessions` ve `endless_blackjack_actions`: açık elleri ve işlenmiş hamle kimliklerini saklar; bot yeniden başlatıldığında oyun kaybolmaz ve aynı Discord hamlesi ikinci kez uygulanmaz.
+- `endless_blackjack_sessions` ve `endless_blackjack_actions`: açık elleri, kalan karıştırılmış desteyi ve işlenmiş hamle kimliklerini saklar; bot yeniden başlatıldığında aynı el sürer ve aynı Discord hamlesi ikinci kez uygulanmaz.
 - `test/`: oyun kuralları ve yoldaş bonusları için `npm test` ile çalışan regresyon testleri.
 - Yoldaş besleme zamanı `endless_pets.last_fed_at` alanında saklanır; şema bu alanı mevcut kurulumlara otomatik ve güvenli biçimde ekler.
 - Yoldaş pasifleri her 10 sadakatte %1 artar (en çok %10); ejderha zindan hasarına her 20 sadakatte +1 (en çok +5) verir. Sadakati 100 olan yoldaş tekrar beslenemez ve Coin harcanmaz.
