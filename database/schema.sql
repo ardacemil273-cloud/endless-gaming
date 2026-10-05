@@ -215,4 +215,25 @@ CREATE TABLE IF NOT EXISTS endless_pets (
   FOREIGN KEY (world_id, user_id) REFERENCES endless_players(world_id, user_id) ON DELETE CASCADE
 );
 
+-- Sunucudaki bütün oyuncuların birlikte savaştığı ortak Dünya Boss'u.
+CREATE TABLE IF NOT EXISTS endless_world_events (
+  world_id TEXT PRIMARY KEY,
+  event_key TEXT NOT NULL,
+  boss_name TEXT NOT NULL,
+  max_hp INTEGER NOT NULL CHECK (max_hp > 0),
+  current_hp INTEGER NOT NULL CHECK (current_hp >= 0),
+  status TEXT NOT NULL CHECK (status IN ('active', 'defeated')),
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  defeated_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS endless_world_event_contributions (
+  world_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  damage BIGINT NOT NULL DEFAULT 0 CHECK (damage >= 0),
+  attacks INTEGER NOT NULL DEFAULT 0 CHECK (attacks >= 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (world_id, user_id)
+);
+
 CREATE INDEX IF NOT EXISTS endless_collection_animals_rarity_idx ON endless_collection_animals (world_id, user_id, rarity);

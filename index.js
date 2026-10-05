@@ -474,6 +474,12 @@ const commandData = [
     )
     .addSubcommand((subcommand) => subcommand.setName("show").setDescription("Yoldaşını ve sadakat seviyesini gör."))
     .addSubcommand((subcommand) => subcommand.setName("feed").setDescription("25 Coin harcayarak yoldaşının sadakatini artır.")),
+  new SlashCommandBuilder()
+    .setName("event")
+    .setDescription("Sunucunun ortak Dünya Boss etkinliğine katıl.")
+    .addSubcommand((subcommand) => subcommand.setName("status").setDescription("Ortak bossun kalan canını ve etkinlik durumunu gör."))
+    .addSubcommand((subcommand) => subcommand.setName("attack").setDescription("20 Coin ödeyip boss'a saldır ve katkı puanı kazan."))
+    .addSubcommand((subcommand) => subcommand.setName("leaderboard").setDescription("Boss savaşındaki en yüksek hasar katkılarını gör.")),
   funCommand,
   endlessCommand,
   gamesCommand,
@@ -2119,6 +2125,71 @@ async function handlePet(interaction) {
   return interaction.editReply(`🍖 **${result.petName}** mutlu mutlu yemeğini yedi! Sadakat: **${result.loyalty}/100**. ${result.loyalty >= 100 ? "Yoldaşın maksimum sadakate ulaştı!" : "Yarın tekrar besleyebilirsin."}`);
 }
 
+const WORLD_BOSS = { key: "ash_colossus", name: "Kül Kolossusu", maxHp: 25_000 };
+
+async function ensureWorldEvent(worldId) {
+  await pool.query(
+    "INSERT INTO endless_world_events (world_id, event_key, boss_name, max_hp, current_hp, status) VALUES ($1, $2, $3, $4, $4, 'active') ON CONFLICT (world_id) DO NOTHING",
+    [worldId, WORLD_BOSS.key, WORLD_BOSS.name, WORLD_BOSS.maxHp],
+  );
+}
+
+async function handleWorldEvent(interaction) {
+  const worldId = await requireGuild(interaction, "Dünya Boss etkinliği");
+  if (!worldId) return;
+  await interaction.deferReply({ ephemeral: false });
+  await ensureWorldEvent(worldId);
+  const action = interaction.options.getSubcommand();
+
+  if (action === "status") {
+    const [eventResult, contributionResult] = await Promise.all([
+      pool.query("SELECT boss_name, max_hp, current_hp, status, started_at, defeated_at FROM endless_world_events WHERE world_id = $1 LIMIT 1", [worldId]),
+      pool.query("SELECT COUNT(*)::int AS players, COALESCE(SUM(damage), 0)::int AS damage FROM endless_world_event_contributions WHERE world_id = $1", [worldId]),
+    ]);
+    const event = eventResult.rows[0];
+    const summary = contributionResult.rows[0];
+    const percent = Math.max(0, Math.round((Number(event.current_hp) / Number(event.max_hp)) * 100));
+    const bar = `${"🟥".repeat(Math.max(1, Math.ceil(percent / 10)))}${"⬛".repeat(10 - Math.max(1, Math.ceil(percent / 10)))}`;
+    return interaction.editReply(`**${event.boss_name} — Dünya Boss**\n${bar}\nCan: **${Number(event.current_hp).toLocaleString("tr-TR")} / ${Number(event.max_hp).toLocaleString("tr-TR")}** (%${percent})\nDurum: **${event.status === "active" ? "Savaş devam ediyor" : "Boss yenildi"}**\nKatılan oyuncu: **${summary.players}** · Toplam hasar: **${Number(summary.damage).toLocaleString("tr-TR")}**\nSaldırı için: "/event attack"`);
+  }
+
+  if (action === "leaderboard") {
+    const result = await pool.query("SELECT user_id, damage, attacks FROM endless_world_event_contributions WHERE world_id = $1 ORDER BY damage DESC, attacks ASC LIMIT 10", [worldId]);
+    if (!result.rows.length) return interaction.editReply("Henüz kimse Dünya Boss'a saldırmadı. İlk vuruşu sen yap!");
+    const lines = result.rows.map((row, index) => `${index + 1}. Oyuncu ${row.user_id} — **${Number(row.damage).toLocaleString("tr-TR")} hasar** · ${row.attacks} saldırı`);
+    return interaction.editReply({ content: ["**Dünya Boss Katkı Sıralaması**", ...lines].join("\n"), allowedMentions: { parse: [] } });
+  }
+
+  const result = await inTransaction(async (client) => {
+    const eventResult = await client.query("SELECT boss_name, current_hp, status FROM endless_world_events WHERE world_id = $1 FOR UPDATE", [worldId]);
+    const event = eventResult.rows[0];
+    if (!event || event.status !== "active") return { ok: false, reason: "defeated", bossName: event?.boss_name ?? WORLD_BOSS.name };
+    const playerResult = await client.query("SELECT level FROM endless_players WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, interaction.user.id]);
+    const walletResult = await client.query("SELECT wallet_coins FROM endless_wallets WHERE world_id = $1 AND user_id = $2 FOR UPDATE", [worldId, interaction.user.id]);
+    if (!playerResult.rows[0] || !walletResult.rows[0]) return { ok: false, reason: "not_registered" };
+    if (Number(walletResult.rows[0].wallet_coins) < 20) return { ok: false, reason: "insufficient_funds" };
+    const ledgerInserted = await insertLedger(client, { worldId, userId: interaction.user.id, currency: "coin", walletDelta: -20, reason: "world_event_attack", idempotencyKey: `world-event-attack:${interaction.id}` });
+    if (!ledgerInserted) return { ok: false, reason: "duplicate" };
+    await client.query("UPDATE endless_wallets SET wallet_coins = wallet_coins - 20, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, interaction.user.id]);
+    const damage = randomInt(35, 91) + Number(playerResult.rows[0].level) * 4;
+    const nextHp = Math.max(0, Number(event.current_hp) - damage);
+    const defeated = nextHp === 0;
+    await client.query("UPDATE endless_world_events SET current_hp = $2, status = $3, defeated_at = CASE WHEN $3 = 'defeated' THEN NOW() ELSE defeated_at END WHERE world_id = $1", [worldId, nextHp, defeated ? "defeated" : "active"]);
+    await client.query("INSERT INTO endless_world_event_contributions (world_id, user_id, damage, attacks) VALUES ($1, $2, $3, 1) ON CONFLICT (world_id, user_id) DO UPDATE SET damage = endless_world_event_contributions.damage + EXCLUDED.damage, attacks = endless_world_event_contributions.attacks + 1, updated_at = NOW()", [worldId, interaction.user.id, damage]);
+    if (defeated) {
+      await insertLedger(client, { worldId, userId: interaction.user.id, currency: "coin", walletDelta: 1_000, reason: "world_event_boss_reward", idempotencyKey: `world-event-reward:${worldId}:${interaction.user.id}:${WORLD_BOSS.key}` });
+      await insertLedger(client, { worldId, userId: interaction.user.id, currency: "gem", walletDelta: 5, reason: "world_event_boss_reward", idempotencyKey: `world-event-reward:${worldId}:${interaction.user.id}:${WORLD_BOSS.key}:gem` });
+      await client.query("UPDATE endless_wallets SET wallet_coins = wallet_coins + 1000, wallet_gems = wallet_gems + 5, updated_at = NOW() WHERE world_id = $1 AND user_id = $2", [worldId, interaction.user.id]);
+    }
+    return { ok: true, damage, nextHp, defeated, bossName: event.boss_name };
+  });
+  if (!result.ok) {
+    const messages = { not_registered: "Önce `/start` ile karakter oluştur.", insufficient_funds: "Boss'a saldırmak için **20 Coin** gerekiyor.", duplicate: "Bu saldırı zaten işlendi.", defeated: `**${result.bossName}** zaten yenildi. Yeni etkinlik yakında açılacak.` };
+    return interaction.editReply(messages[result.reason]);
+  }
+  return interaction.editReply(result.defeated ? `💥 **${result.bossName}** yenildi! Senin son darben **${result.damage} hasar** verdi. Katkı ödülün: **1.000 Coin + 5 Gem**!` : `⚔️ **${result.bossName}**'a **${result.damage} hasar** verdin! Kalan can: **${result.nextHp.toLocaleString("tr-TR")}**. Saldırı bedeli: 20 Coin.`);
+}
+
 const helpText = [
   "**ENDLESS — Komut Rehberi**",
   "`/start` — Bu sunucunun dünyasında karakter oluştur.",
@@ -2156,6 +2227,7 @@ const helpText = [
   "`/social hug` / `/social kiss` / `/social cuddle` / `/social pat` / `/social highfive` / `/social boop` — Özgün Endless animasyonları gönder.",
   "`/achievements show` / `/achievements claim` — Rozetlerini gör ve tek seferlik başarı ödüllerini al.",
   "`/pet adopt` / `/pet show` / `/pet feed` — Özgün bir Endless Yoldaşı sahiplen, isim ver ve sadakatini büyüt.",
+  "`/event status` / `/event attack` / `/event leaderboard` — Sunucunun ortak Dünya Boss'una saldır ve katkı sıralamasına gir.",
   "",
   "Her Discord sunucusu ayrı bir dünyadır. Karakterin ve ekonomin dünyaya özeldir. Günlük ödül ve görevler UTC gece yarısında yenilenir; keşifler arasında 5 dakika bekleme vardır.",
 ].join("\n");
@@ -2779,6 +2851,7 @@ const handlers = {
   social: handleSocial,
   achievements: handleAchievements,
   pet: handlePet,
+  event: handleWorldEvent,
   help: async (interaction) => sendPrivate(interaction, helpText),
 };
 

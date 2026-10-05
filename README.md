@@ -16,6 +16,7 @@ Discord sunucularını ayrı oyun dünyalarına dönüştüren, PostgreSQL deste
 - **Endless Arcade genişletmesi:** rulet, crash ve veritabanına kaydedilen günlük ücretsiz Şans Çarkı
 - **Başarım Salonu:** `/achievements show` ile kalıcı rozet ilerlemesi, `/achievements claim` ile tek seferlik Coin/Gem/XP ödülleri
 - **Endless Yoldaşlar:** `/pet adopt`, `/pet show` ve `/pet feed` ile dört türden bir yoldaş sahiplenme, isim verme ve sadakat geliştirme
+- **Dünya Boss Raid:** `/event status`, `/event attack` ve `/event leaderboard` ile bütün sunucunun birlikte savaştığı ortak Kül Kolossusu
 - **Özgün sosyal animasyonlar:** `/social hug`, `/social kiss`, `/social cuddle`, `/social pat`, `/social highfive` ve `/social boop` Discord mesajını adım adım günceller.
 - **Markaya özel GIF paketi:** `assets/gifs/` altındaki altı özgün GIF, sosyal komutlarda Discord ek dosyası olarak gönderilir.
 - **Oyun animasyonları:** av, tapınak, transfer, bahis, slot, blackjack, mayın tarlası ve sosyal hareketler Discord mesajını adım adım günceller.
@@ -52,6 +53,7 @@ Detaylı açıklama için [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) dosyasına 
 - `assets/gifs/`: Discord'da gönderilen özgün Endless sosyal animasyonlarıdır.
 - `endless_achievement_claims`: başarımların ödülünün iki kez verilmesini engeller.
 - `endless_pets`: oyuncunun yoldaş türünü, adını ve 1–100 arasındaki sadakat seviyesini saklar.
+- `endless_world_events` ve `endless_world_event_contributions`: ortak boss canını ve oyuncuların hasar katkılarını saklar.
 - Para hareketlerinde önce ledger kaydı, sonra bakiye güncellemesi yapılır; böylece aynı Discord isteği iki kez ödül veremez.
 
 ## Güvenlik ve operasyon
